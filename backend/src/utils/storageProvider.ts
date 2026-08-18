@@ -12,6 +12,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import dotenv from 'dotenv';
+import './config.js'; // ensures .env is loaded before the provider type is read
 
 dotenv.config();
 

@@ -9,6 +9,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { getStorageProvider } from '../utils/storageProvider.js';
+import { MAX_UPLOAD_BYTES, JWT_SECRET } from '../utils/config.js';
 
 // Define directories
 const dataDir = path.resolve('data');
@@ -32,7 +33,7 @@ const storage = multer.diskStorage({
 export const upload = multer({
   storage,
   limits: {
-    fileSize: 500 * 1024 * 1024 // 500 MB limit (can be configured)
+    fileSize: MAX_UPLOAD_BYTES
   }
 });
 
@@ -192,7 +193,6 @@ export async function downloadFile(req: Request, res: Response) {
       const apiKey = (req.headers['x-api-key'] || req.query.api_key) as string;
       
       let authenticated = false;
-      const JWT_SECRET = process.env.JWT_SECRET || 'gentan-secret-key-123456';
 
       // 1. JWT validation
       const token = authHeader ? authHeader.split(' ')[1] : queryToken;

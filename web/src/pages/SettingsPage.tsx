@@ -1,0 +1,114 @@
+import { useState } from 'react';
+import { KeyRound } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
+import { Spinner } from '../components/ui/Spinner';
+import { RoleBadge } from '../components/ui/RoleBadge';
+
+export function SettingsPage() {
+  const { apiFetch, user } = useAuth();
+  const { showToast } = useToast();
+
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (newPassword !== confirmPassword) {
+      showToast('Password baru dan konfirmasi tidak cocok.', 'error');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await apiFetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+      showToast('Password berhasil diubah.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error) {
+      showToast((error as Error).message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ maxWidth: '600px' }}>
+      <div className="dashboard-panel" style={{ marginBottom: '1.5rem' }}>
+        <h3>Akun Anda</h3>
+        <div className="file-details-list" style={{ marginTop: '1rem' }}>
+          <div className="detail-item">
+            <span className="detail-label">Username</span>
+            <span className="detail-value">{user?.username}</span>
+          </div>
+          <div className="detail-item">
+            <span className="detail-label">Peran</span>
+            <span className="detail-value">{user && <RoleBadge role={user.role} />}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="dashboard-panel">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+          <KeyRound style={{ color: 'var(--accent-primary)' }} />
+          <h3>Ganti Password</h3>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label className="form-label" htmlFor="curr-password">Password Saat Ini</label>
+            <input
+              className="form-input"
+              id="curr-password"
+              type="password"
+              placeholder="••••••••••••"
+              value={currentPassword}
+              onChange={event => setCurrentPassword(event.target.value)}
+              required
+              autoComplete="current-password"
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="new-password">Password Baru</label>
+            <input
+              className="form-input"
+              id="new-password"
+              type="password"
+              placeholder="Minimal 6 karakter"
+              value={newPassword}
+              onChange={event => setNewPassword(event.target.value)}
+              required
+              minLength={6}
+              autoComplete="new-password"
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="conf-password">Konfirmasi Password Baru</label>
+            <input
+              className="form-input"
+              id="conf-password"
+              type="password"
+              placeholder="Ulangi password baru"
+              value={confirmPassword}
+              onChange={event => setConfirmPassword(event.target.value)}
+              required
+              minLength={6}
+              autoComplete="new-password"
+            />
+          </div>
+          <button className="btn btn-primary" type="submit" disabled={loading} style={{ marginTop: '0.5rem' }}>
+            {loading ? <Spinner size={18} /> : 'Perbarui Password'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}

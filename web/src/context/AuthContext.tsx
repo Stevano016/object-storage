@@ -1,94 +1,127 @@
-import React, { createContext, useContext, useState } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+import type { AuthUser } from '../types';
 
-interface User {
-  id: string;
-  username: string;
+const TOKEN_STORAGE_KEY = 'gentan_token';
+const USER_STORAGE_KEY = 'gentan_user';
+
+function readStoredUser(): AuthUser | null {
+  const raw = localStorage.getItem(USER_STORAGE_KEY);
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw) as AuthUser;
+  } catch {
+    localStorage.removeItem(USER_STORAGE_KEY);
+    return null;
+  }
 }
 
-interface AuthContextType {
+/**
+ * In production the API is served from the same origin as the dashboard.
+ * During development Vite runs on 5173 while the backend stays on 5000.
+ */
+function resolveApiUrl(): string {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  return window.location.hostname === 'localhost' ? 'http://localhost:5000' : window.location.origin;
+}
+
+interface AuthContextValue {
   token: string | null;
-  user: User | null;
+  user: AuthUser | null;
   isAuthenticated: boolean;
-  login: (token: string, user: User) => void;
-  logout: () => void;
-  apiFetch: (path: string, options?: RequestInit) => Promise<any>;
+  isSuperAdmin: boolean;
   apiUrl: string;
+  login: (token: string, user: AuthUser) => void;
+  logout: () => void;
+  refreshUser: () => Promise<void>;
+  apiFetch: <T = any>(path: string, options?: RequestInit) => Promise<T>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-export const useAuth = () => {
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_STORAGE_KEY));
+  const [user, setUser] = useState<AuthUser | null>(readStoredUser);
+
+  const apiUrl = useMemo(resolveApiUrl, []);
+
+  const login = useCallback((newToken: string, newUser: AuthUser) => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, newToken);
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
+    setToken(newToken);
+    setUser(newUser);
+  }, []);
+
+  const logout = useCallback(() => {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem(USER_STORAGE_KEY);
+    setToken(null);
+    setUser(null);
+  }, []);
+
+  const apiFetch = useCallback(async <T,>(path: string, options: RequestInit = {}): Promise<T> => {
+    const headers = new Headers(options.headers);
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+
+    const response = await fetch(`${apiUrl}${path}`, { ...options, headers });
+
+    // 401 means the session itself is gone; 403 only means this account lacks
+    // the permission, which must not kick the user out of the dashboard.
+    if (response.status === 401) {
+      logout();
+      throw new Error('Sesi Anda telah berakhir. Silakan masuk kembali.');
+    }
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody.error || `Permintaan gagal (HTTP ${response.status}).`);
+    }
+
+    const contentType = response.headers.get('content-type');
+    if (contentType?.includes('application/json')) {
+      return response.json() as Promise<T>;
+    }
+
+    return response as unknown as T;
+  }, [apiUrl, token, logout]);
+
+  /** Re-reads the account so role changes made by a superadmin apply without a re-login. */
+  const refreshUser = useCallback(async () => {
+    if (!token) return;
+
+    try {
+      const data = await apiFetch<{ user: AuthUser }>('/api/auth/me');
+      if (data?.user) {
+        localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data.user));
+        setUser(data.user);
+      }
+    } catch {
+      // A failed refresh is not fatal: 401 already logged the user out.
+    }
+  }, [token, apiFetch]);
+
+  const value = useMemo<AuthContextValue>(() => ({
+    token,
+    user,
+    isAuthenticated: Boolean(token),
+    isSuperAdmin: user?.role === 'superadmin',
+    apiUrl,
+    login,
+    logout,
+    refreshUser,
+    apiFetch
+  }), [token, user, apiUrl, login, logout, refreshUser, apiFetch]);
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-};
-
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [token, setToken] = useState<string | null>(localStorage.getItem('gentan_token'));
-  const [user, setUser] = useState<User | null>(
-    localStorage.getItem('gentan_user') ? JSON.parse(localStorage.getItem('gentan_user')!) : null
-  );
-
-  // Set default API URL based on environment
-  // If in production on VPS, API is served on the same host, so we use origin.
-  // In development, Vite runs on 5173, backend runs on 5000.
-  const apiUrl = import.meta.env.VITE_API_URL || 
-                 (window.location.hostname === 'localhost' ? 'http://localhost:5000' : window.location.origin);
-
-  const login = (newToken: string, newUser: User) => {
-    localStorage.setItem('gentan_token', newToken);
-    localStorage.setItem('gentan_user', JSON.stringify(newUser));
-    setToken(newToken);
-    setUser(newUser);
-  };
-
-  const logout = () => {
-    localStorage.removeItem('gentan_token');
-    localStorage.removeItem('gentan_user');
-    setToken(null);
-    setUser(null);
-  };
-
-  const apiFetch = async (path: string, options: RequestInit = {}) => {
-    const headers = new Headers(options.headers || {});
-    
-    // Inject Authorization header if token exists
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`);
-    }
-
-    const response = await fetch(`${apiUrl}${path}`, {
-      ...options,
-      headers
-    });
-
-    if (response.status === 401 || response.status === 403) {
-      // Auto logout if JWT expires or is rejected
-      logout();
-      throw new Error('Session expired or unauthorized');
-    }
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-    }
-
-    // Check if the response is JSON, otherwise return text or blob
-    const contentType = response.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-      return response.json();
-    }
-    
-    return response;
-  };
-
-  const isAuthenticated = !!token;
-
-  return (
-    <AuthContext.Provider value={{ token, user, isAuthenticated, login, logout, apiFetch, apiUrl }}>
-      {children}
-    </AuthContext.Provider>
-  );
-};
+}

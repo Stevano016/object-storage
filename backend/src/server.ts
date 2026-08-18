@@ -1,86 +1,69 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
+import { PORT, CORS_ORIGIN } from './utils/config.js';
 import { initDb } from './utils/db.js';
-import { 
-  authenticateJWT, 
-  authenticateFlexible 
+import {
+  authenticateJWT,
+  authenticateFlexible,
+  requireSuperAdmin,
+  requireSuperAdminOrApiKey
 } from './middleware/auth.js';
-import { 
-  login, 
-  changePassword, 
-  getStats 
-} from './controllers/authController.js';
-import { 
-  listBuckets, 
-  createBucket, 
-  updateBucket, 
-  deleteBucket 
-} from './controllers/bucketController.js';
-import { 
-  upload, 
-  listFiles, 
-  uploadFile, 
-  downloadFile, 
-  deleteFile 
-} from './controllers/fileController.js';
-import { 
-  listAPIKeys, 
-  createAPIKey, 
-  deleteAPIKey 
-} from './controllers/keyController.js';
-
-// Load environment variables
-dotenv.config();
+import { login, me, changePassword, getStats } from './controllers/authController.js';
+import { listBuckets, createBucket, updateBucket, deleteBucket } from './controllers/bucketController.js';
+import { upload, listFiles, uploadFile, downloadFile, deleteFile } from './controllers/fileController.js';
+import { listAPIKeys, createAPIKey, deleteAPIKey } from './controllers/keyController.js';
+import { listUsers, createUser, updateUser, deleteUser } from './controllers/userController.js';
 
 const app = express();
-const PORT = process.env.PORT || 5000;
 
-// Enable CORS with security settings
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
+  origin: CORS_ORIGIN,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key']
 }));
 
-// Parse JSON request body
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve API routes
-// Authentication Routes
+// --- Authentication (any signed-in account) ---
 app.post('/api/auth/login', login);
+app.get('/api/auth/me', authenticateJWT, me);
 app.post('/api/auth/change-password', authenticateJWT, changePassword);
 app.get('/api/auth/stats', authenticateJWT, getStats);
 
-// Bucket Routes
+// --- Buckets: everyone may browse, only superadmins may reshape them ---
 app.get('/api/buckets', authenticateJWT, listBuckets);
-app.post('/api/buckets', authenticateJWT, createBucket);
-app.put('/api/buckets/:bucketName', authenticateJWT, updateBucket);
-app.delete('/api/buckets/:bucketName', authenticateJWT, deleteBucket);
+app.post('/api/buckets', authenticateJWT, requireSuperAdmin, createBucket);
+app.put('/api/buckets/:bucketName', authenticateJWT, requireSuperAdmin, updateBucket);
+app.delete('/api/buckets/:bucketName', authenticateJWT, requireSuperAdmin, deleteBucket);
 
-// File Metadata Routes (Protected by either JWT or API Key)
+// --- Files: regular users may list and upload; deleting is privileged ---
 app.get('/api/buckets/:bucketName/files', authenticateFlexible, listFiles);
 app.post('/api/buckets/:bucketName/files', authenticateFlexible, upload.single('file'), uploadFile);
-app.delete('/api/buckets/:bucketName/files/:fileId', authenticateFlexible, deleteFile);
+app.delete('/api/buckets/:bucketName/files/:fileId', authenticateFlexible, requireSuperAdminOrApiKey, deleteFile);
 
-// API Key Routes (Admin only)
-app.get('/api/keys', authenticateJWT, listAPIKeys);
-app.post('/api/keys', authenticateJWT, createAPIKey);
-app.delete('/api/keys/:id', authenticateJWT, deleteAPIKey);
+// --- API keys (superadmin only) ---
+app.get('/api/keys', authenticateJWT, requireSuperAdmin, listAPIKeys);
+app.post('/api/keys', authenticateJWT, requireSuperAdmin, createAPIKey);
+app.delete('/api/keys/:id', authenticateJWT, requireSuperAdmin, deleteAPIKey);
 
-// Public/Private Storage Router (Outside /api for cleaner URL routes)
-// Note: downloadFile handles authorization inside itself to allow seamless HTML5 player integration
+// --- User management (superadmin only) ---
+app.get('/api/users', authenticateJWT, requireSuperAdmin, listUsers);
+app.post('/api/users', authenticateJWT, requireSuperAdmin, createUser);
+app.put('/api/users/:id', authenticateJWT, requireSuperAdmin, updateUser);
+app.delete('/api/users/:id', authenticateJWT, requireSuperAdmin, deleteUser);
+
+// Public/private storage router (outside /api for cleaner URLs).
+// downloadFile authorizes internally so HTML5 media players can stream directly.
 app.get('/s/:bucketName/:filename', downloadFile);
 
-// Simple health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
-// Serve React dashboard statically in production
+// Serve the built React dashboard in production
 const webDistPath = path.resolve('../web/dist');
 if (fs.existsSync(webDistPath)) {
   console.log(`Serving static web assets from: ${webDistPath}`);
@@ -93,17 +76,16 @@ if (fs.existsSync(webDistPath)) {
   });
 }
 
-// Initialize database and start the server
 async function startServer() {
   try {
     console.log('Initializing database...');
     await initDb();
-    
+
     app.listen(PORT, () => {
-      console.log(`==================================================`);
+      console.log('==================================================');
       console.log(`Gentan Storage server running on port: ${PORT}`);
       console.log(`Local url: http://localhost:${PORT}`);
-      console.log(`==================================================`);
+      console.log('==================================================');
     });
   } catch (error) {
     console.error('Failed to start Gentan Storage server:', error);

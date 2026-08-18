@@ -148,6 +148,41 @@ Aplikasi Anda kini akan mengunggah file-file biner langsung ke MinIO, sementara 
 
 ---
 
+## Peran Pengguna (Role)
+
+Setiap akun memiliki salah satu dari dua peran. Pembatasan diterapkan di sisi server, bukan sekadar disembunyikan di antarmuka.
+
+| Kemampuan | Super Admin | User Biasa |
+| --- | :---: | :---: |
+| Melihat daftar bucket dan berkas | ✅ | ✅ |
+| Mengunggah berkas | ✅ | ✅ |
+| Mengunduh / streaming berkas | ✅ | ✅ |
+| Menghapus berkas | ✅ | ❌ |
+| Membuat, mengubah, menghapus bucket | ✅ | ❌ |
+| Membuat dan mencabut API Key | ✅ | ❌ |
+| Menambah, mengubah, menghapus pengguna | ✅ | ❌ |
+| Mengganti password sendiri | ✅ | ✅ |
+
+Akun `admin` bawaan otomatis berperan **Super Admin**. Database lama (sebelum fitur ini) akan dimigrasikan otomatis saat server dijalankan: kolom `role` ditambahkan dan seluruh akun yang sudah ada dipromosikan menjadi Super Admin.
+
+Pengelolaan akun ada di tab **Manajemen User** pada dasbor (hanya terlihat oleh Super Admin). Beberapa pengaman yang berlaku:
+
+- Super Admin tidak dapat mengubah peran atau menghapus akunnya sendiri.
+- Super Admin terakhir tidak dapat diturunkan perannya atau dihapus, sehingga sistem tidak pernah kehilangan administrator.
+- Perubahan peran langsung berlaku pada permintaan berikutnya tanpa perlu login ulang, karena peran dibaca ulang dari database di setiap permintaan.
+
+Endpoint terkait (semua memerlukan JWT Super Admin):
+
+```http
+GET    /api/users            # daftar pengguna
+POST   /api/users            # { username, password, role }
+PUT    /api/users/:id        # { username?, password?, role? }
+DELETE /api/users/:id
+GET    /api/auth/me          # profil akun yang sedang masuk
+```
+
+---
+
 ## Panduan Akses API & Integrasi Programmatic
 
 ### 1. Mengunggah File via API
