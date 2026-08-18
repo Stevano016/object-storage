@@ -32,3 +32,7 @@ backend/data/*.sqlite
 # OS files
 .DS_Store
 Thumbs.db
+
+# aaPanel site artifacts — only exist inside the deployment directory
+.user.ini
+.well-known/
