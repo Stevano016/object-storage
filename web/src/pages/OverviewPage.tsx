@@ -23,7 +23,7 @@ function StatCard({ icon: Icon, value, label }: StatCardProps) {
 }
 
 function DiskPanel({ stats }: { stats: Stats }) {
-  const { disk, storageProvider } = stats;
+  const { disk, diskLabel, storageProvider } = stats;
   const usesObjectStore = storageProvider !== 'local';
 
   return (
@@ -39,7 +39,7 @@ function DiskPanel({ stats }: { stats: Stats }) {
         {disk ? (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
-              <span>Terpakai di partisi data:</span>
+              <span>{diskLabel || 'Kapasitas disk'}:</span>
               <span style={{ fontWeight: 600 }}>
                 {formatBytes(disk.used)} / {formatBytes(disk.total)}
               </span>
@@ -48,10 +48,8 @@ function DiskPanel({ stats }: { stats: Stats }) {
               <div className="progress-bar-fill" style={{ width: `${formatPercent(disk.used, disk.total)}%` }} />
             </div>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-              Sisa ruang kosong: <strong>{formatBytes(disk.free)}</strong>.
-              {usesObjectStore
-                ? ' Berkas biner disimpan di object store; partisi ini hanya menampung database SQLite dan berkas sementara.'
-                : ' Berkas biner disimpan langsung di partisi ini.'}
+              Sisa ruang kosong: <strong>{formatBytes(disk.free)}</strong>. Angka ini adalah kapasitas
+              filesystem yang dipantau server, bukan kuota aplikasi.
             </p>
           </>
         ) : (

@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { getDb, hashPassword } from '../utils/db.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
-import { JWT_SECRET, JWT_EXPIRES_IN } from '../utils/config.js';
+import { JWT_SECRET, JWT_EXPIRES_IN, DISK_REPORT_PATH } from '../utils/config.js';
 
 const MIN_PASSWORD_LENGTH = 6;
 
@@ -88,7 +88,7 @@ function getFolderSize(dirPath: string): number {
   return size;
 }
 
-/** Real capacity of the filesystem holding the data directory (null if unsupported). */
+/** Real capacity of a mounted filesystem (null if the platform has no statfs). */
 function getDiskUsage(target: string): { total: number; free: number; used: number } | null {
   try {
     const stat = fs.statfsSync(target);
@@ -119,7 +119,8 @@ export async function getStats(req: AuthenticatedRequest, res: Response) {
       physicalDiskSize: getFolderSize(path.join(dataDir, 'storage')),
       apiKeys: keyCount?.count || 0,
       users: userCount?.count || 0,
-      disk: getDiskUsage(dataDir),
+      disk: getDiskUsage(DISK_REPORT_PATH || dataDir),
+      diskLabel: DISK_REPORT_PATH ? 'Kapasitas penyimpanan objek' : 'Kapasitas partisi data aplikasi',
       storageProvider: process.env.STORAGE_PROVIDER || 'local'
     });
   } catch (error) {

@@ -33,8 +33,12 @@ services:
       S3_REGION: us-east-1
       S3_BUCKET_PREFIX: gentan-
       S3_FORCE_PATH_STYLE: "true"
+      # Dasbor melaporkan kapasitas filesystem ini. Diarahkan ke volume MinIO
+      # agar angka yang tampil adalah kapasitas penyimpanan objek yang sebenarnya.
+      DISK_REPORT_PATH: /mnt/objectstore
     volumes:
       - ./backend/data:/app/backend/data # Menyimpan database SQLite secara persisten di host VPS
+      - minio_data:/mnt/objectstore:ro # Hanya untuk membaca kapasitas disk (read-only)
     depends_on:
       - minio
     restart: always

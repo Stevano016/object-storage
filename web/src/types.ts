@@ -48,6 +48,7 @@ export interface Stats {
   apiKeys: number;
   users: number;
   disk: DiskUsage | null;
+  diskLabel: string;
   storageProvider: string;
 }
 

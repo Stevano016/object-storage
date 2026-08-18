@@ -11,6 +11,7 @@ const EMPTY_STATS: Stats = {
   apiKeys: 0,
   users: 0,
   disk: null,
+  diskLabel: '',
   storageProvider: 'local'
 };
 
