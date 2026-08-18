@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Copy, ExternalLink, Eye, Link2, Pencil, Trash2 } from 'lucide-react';
+import { Copy, ExternalLink, Link2, Trash2 } from 'lucide-react';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
 import { useAuth } from '../context/AuthContext';
@@ -16,23 +16,6 @@ const EXPIRY_OPTIONS = [
   { value: '30', label: '30 hari' },
   { value: '365', label: '1 tahun' }
 ];
-
-const PERMISSION_LABELS: Record<SharePermission, string> = {
-  viewer: 'Lihat & Unduh',
-  editor: 'Unggah & Hapus'
-};
-
-function PermissionBadge({ permission }: { permission: SharePermission }) {
-  const isEditor = permission === 'editor';
-  const Icon = isEditor ? Pencil : Eye;
-
-  return (
-    <span className={`badge ${isEditor ? 'badge-private' : 'badge-public'}`}>
-      <Icon style={{ width: 12, height: 12 }} />
-      {PERMISSION_LABELS[permission]}
-    </span>
-  );
-}
 
 interface SharesPageProps {
   buckets: Bucket[];
@@ -95,7 +78,7 @@ export function SharesPage({ buckets }: SharesPageProps) {
         </p>
 
         <form onSubmit={handleCreate}>
-          <div className="overview-grid" style={{ gap: '1rem' }}>
+          <div className="form-grid">
             <div className="form-group">
               <label className="form-label" htmlFor="share-bucket">Bucket</label>
               <select
@@ -220,19 +203,19 @@ export function SharesPage({ buckets }: SharesPageProps) {
 
                 return (
                   <tr key={share.id}>
-                    <td>
+                    <td className="cell-stacked" data-label="Tautan">
                       <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                         {share.label || share.bucketName}
                       </div>
                       <code style={{ fontSize: '0.75rem', wordBreak: 'break-all' }}>{url}</code>
                     </td>
-                    <td>
+                    <td className="cell-stacked" data-label="Cakupan">
                       <div>{share.bucketName}</div>
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                         {share.fileName ? `Berkas: ${share.fileName}` : 'Seluruh bucket'}
                       </span>
                     </td>
-                    <td>
+                    <td className="cell-stacked" data-label="Izin">
                       <select
                         className="form-input"
                         value={share.permission}
@@ -245,11 +228,12 @@ export function SharesPage({ buckets }: SharesPageProps) {
                         <option value="viewer">Lihat &amp; Unduh</option>
                         <option value="editor">Unggah &amp; Hapus</option>
                       </select>
-                      <div style={{ marginTop: '0.35rem' }}>
-                        <PermissionBadge permission={share.permission} />
-                      </div>
                     </td>
-                    <td style={{ fontSize: '0.85rem', color: expired ? 'var(--danger)' : undefined }}>
+                    <td
+                      className="cell-stacked"
+                      data-label="Kedaluwarsa"
+                      style={{ fontSize: '0.85rem', color: expired ? 'var(--danger)' : undefined }}
+                    >
                       {share.expiresAt
                         ? `${expired ? 'Kedaluwarsa ' : 'Sampai '}${formatDateTime(share.expiresAt)}`
                         : 'Tidak pernah'}
@@ -257,7 +241,7 @@ export function SharesPage({ buckets }: SharesPageProps) {
                         Dibuat {formatDate(share.createdAt)}
                       </div>
                     </td>
-                    <td style={{ textAlign: 'right' }}>
+                    <td data-label="Aksi" style={{ textAlign: 'right' }}>
                       <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                         <button
                           className="btn btn-secondary btn-icon-only"

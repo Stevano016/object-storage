@@ -93,7 +93,7 @@ export function SharePage({ token }: { token: string }) {
 
       <div className="page-body">
         <div className="explorer-header">
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexGrow: 1, minWidth: '250px' }}>
+          <div className="explorer-controls">
             {canEdit && (
               <button className="btn btn-primary" onClick={() => setShowUploadModal(true)}>
                 <UploadCloud style={{ width: 18, height: 18 }} />

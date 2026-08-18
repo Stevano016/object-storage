@@ -73,13 +73,14 @@ export function FilesPage({
   return (
     <div>
       <div className="explorer-header">
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexGrow: 1, minWidth: '250px' }}>
-          <Folder style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
+        <div className="explorer-controls">
+          {/* Decorative only, and it would sit alone on its own row once the
+              controls wrap on a phone. */}
+          <Folder className="desktop-only" style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
           <select
-            className="form-input"
+            className="form-input bucket-select"
             value={activeBucket}
             onChange={event => onActiveBucketChange(event.target.value)}
-            style={{ maxWidth: '250px', cursor: 'pointer' }}
           >
             <option value="">Pilih Bucket...</option>
             {buckets.map(item => (

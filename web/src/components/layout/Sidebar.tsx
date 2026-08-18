@@ -1,4 +1,4 @@
-import { HardDrive, LogOut, Shield, User } from 'lucide-react';
+import { HardDrive, LogOut, Shield, User, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { getVisibleNavItems } from '../../lib/navigation';
 import { ROLE_LABELS } from '../ui/RoleBadge';
@@ -7,18 +7,30 @@ import type { TabId } from '../../types';
 interface SidebarProps {
   activeTab: TabId;
   onTabChange: (tab: TabId) => void;
+  /** Below 900px the sidebar is an off-canvas drawer. */
+  open: boolean;
+  onClose: () => void;
 }
 
-export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
+export function Sidebar({ activeTab, onTabChange, open, onClose }: SidebarProps) {
   const { user, isSuperAdmin, logout } = useAuth();
   const navItems = getVisibleNavItems(isSuperAdmin);
   const AvatarIcon = isSuperAdmin ? Shield : User;
 
   return (
-    <aside className="sidebar">
-      <div className="brand">
-        <HardDrive style={{ width: 24, height: 24 }} />
-        <span>Gentan Storage</span>
+    <aside className={`sidebar${open ? ' open' : ''}`}>
+      <div className="brand" style={{ justifyContent: 'space-between' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <HardDrive style={{ width: 24, height: 24 }} />
+          Gentan Storage
+        </span>
+        <button
+          className="btn btn-secondary btn-icon-only mobile-only"
+          onClick={onClose}
+          aria-label="Tutup menu"
+        >
+          <X style={{ width: 18, height: 18 }} />
+        </button>
       </div>
 
       <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', flexGrow: 1 }}>
@@ -26,7 +38,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           <button
             key={id}
             className={`nav-btn ${activeTab === id ? 'active' : ''}`}
-            onClick={() => onTabChange(id)}
+            onClick={() => { onTabChange(id); onClose(); }}
           >
             <Icon />
             {label}

@@ -34,7 +34,7 @@ export function BucketsPage({
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+      <div className="page-heading">
         <h3>Daftar Storage Buckets</h3>
         <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
           <Plus style={{ width: 18, height: 18 }} />
@@ -71,8 +71,8 @@ export function BucketsPage({
             <tbody>
               {buckets.map(bucket => (
                 <tr key={bucket.id}>
-                  <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{bucket.name}</td>
-                  <td>
+                  <td data-label="Bucket" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{bucket.name}</td>
+                  <td data-label="Akses">
                     <button
                       style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer' }}
                       onClick={() => void onToggleVisibility(bucket, !bucket.isPublic)}
@@ -85,10 +85,10 @@ export function BucketsPage({
                       </span>
                     </button>
                   </td>
-                  <td>{bucket.fileCount} berkas</td>
-                  <td>{formatBytes(bucket.totalSize)}</td>
-                  <td>{formatDate(bucket.createdAt)}</td>
-                  <td style={{ textAlign: 'right' }}>
+                  <td data-label="Berkas">{bucket.fileCount} berkas</td>
+                  <td data-label="Ukuran">{formatBytes(bucket.totalSize)}</td>
+                  <td data-label="Dibuat">{formatDate(bucket.createdAt)}</td>
+                  <td data-label="Aksi" style={{ textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                       <button
                         className="btn btn-secondary btn-icon-only"

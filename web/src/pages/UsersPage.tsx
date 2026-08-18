@@ -54,7 +54,7 @@ export function UsersPage({ onUsersChanged }: UsersPageProps) {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+      <div className="page-heading">
         <div>
           <h3>Manajemen Pengguna</h3>
           <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
@@ -92,7 +92,7 @@ export function UsersPage({ onUsersChanged }: UsersPageProps) {
 
                 return (
                   <tr key={item.id}>
-                    <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                    <td data-label="Username" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                       {item.username}
                       {isSelf && (
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
@@ -100,9 +100,9 @@ export function UsersPage({ onUsersChanged }: UsersPageProps) {
                         </span>
                       )}
                     </td>
-                    <td><RoleBadge role={item.role} /></td>
-                    <td>{formatDate(item.createdAt)}</td>
-                    <td style={{ textAlign: 'right' }}>
+                    <td data-label="Peran"><RoleBadge role={item.role} /></td>
+                    <td data-label="Dibuat">{formatDate(item.createdAt)}</td>
+                    <td data-label="Aksi" style={{ textAlign: 'right' }}>
                       <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                         <button
                           className="btn btn-secondary btn-icon-only"

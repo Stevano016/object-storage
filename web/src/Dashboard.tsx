@@ -35,6 +35,7 @@ export function Dashboard() {
 
   const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [activeBucket, setActiveBucket] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   // Bumped by the header refresh button to force the file browser to re-read.
   const [filesViewKey, setFilesViewKey] = useState(0);
 
@@ -89,10 +90,26 @@ export function Dashboard() {
 
   return (
     <div className="app-container">
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+      <Sidebar
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
+      {sidebarOpen && (
+        <button
+          className="sidebar-backdrop"
+          onClick={() => setSidebarOpen(false)}
+          aria-label="Tutup menu"
+        />
+      )}
 
       <main className="main-content">
-        <Header activeTab={activeTab} onRefresh={handleHeaderRefresh} />
+        <Header
+          activeTab={activeTab}
+          onRefresh={handleHeaderRefresh}
+          onOpenMenu={() => setSidebarOpen(true)}
+        />
 
         <div className="page-body">
           <Toaster />

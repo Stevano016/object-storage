@@ -120,9 +120,9 @@ export function KeysPage({ onKeysChanged }: KeysPageProps) {
               <tbody>
                 {apiKeys.map(key => (
                   <tr key={key.id}>
-                    <td style={{ fontWeight: 600 }}>{key.name}</td>
-                    <td style={{ fontSize: '0.85rem' }}>{formatDate(key.createdAt)}</td>
-                    <td style={{ textAlign: 'right' }}>
+                    <td data-label="Nama" style={{ fontWeight: 600 }}>{key.name}</td>
+                    <td data-label="Dibuat" style={{ fontSize: '0.85rem' }}>{formatDate(key.createdAt)}</td>
+                    <td data-label="Aksi" style={{ textAlign: 'right' }}>
                       <button
                         className="btn btn-danger btn-icon-only"
                         onClick={() => void handleDelete(key.id)}
