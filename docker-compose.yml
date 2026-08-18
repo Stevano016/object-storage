@@ -6,7 +6,7 @@ services:
     container_name: gentan-minio
     command: server /data --console-address ":9001"
     ports:
-      - "9000:9000" # S3 API endpoint
+      - "9010:9000" # S3 API endpoint (Port 9000 di host ditempati Portainer)
       - "9001:9001" # Web Console admin interface
     environment:
       MINIO_ROOT_USER: minioadmin
