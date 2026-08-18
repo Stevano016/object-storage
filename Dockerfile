@@ -3,7 +3,7 @@
 # ==========================================================================
 
 # --- Stage 1: Build React Frontend ---
-FROM node:18-alpine AS frontend-builder
+FROM node:20-alpine AS frontend-builder
 WORKDIR /app/web
 COPY web/package*.json ./
 RUN npm install
@@ -11,7 +11,7 @@ COPY web/ ./
 RUN npm run build
 
 # --- Stage 2: Build Express Backend ---
-FROM node:18-alpine AS backend-builder
+FROM node:20-alpine AS backend-builder
 WORKDIR /app/backend
 COPY backend/package*.json ./
 RUN npm install
@@ -19,7 +19,7 @@ COPY backend/ ./
 RUN npm run build
 
 # --- Stage 3: Production Runner ---
-FROM node:18-alpine AS runner
+FROM node:20-alpine AS runner
 WORKDIR /app
 COPY --from=backend-builder /app/backend/package*.json ./backend/
 RUN cd backend && npm install --omit=dev
