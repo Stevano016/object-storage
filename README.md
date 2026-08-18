@@ -243,6 +243,25 @@ Tautan yang tidak valid, sudah dicabut, atau kedaluwarsa selalu dijawab `404` ya
 
 ---
 
+## Lokasi Deployment di Server
+
+Stack berjalan di **`/www/wwwroot/gentan.storage`** pada VPS Server Gentan — direktori situs aaPanel yang isinya adalah clone repositori ini. Memperbarui aplikasi cukup:
+
+```bash
+cd /www/wwwroot/gentan.storage
+git pull
+docker compose up -d --build
+```
+
+Dua hal yang tidak boleh diubah sembarangan:
+
+- **`name: object-storage` di `docker-compose.yml`.** Compose menurunkan nama project dari nama folder; tanpa baris ini, memindahkan direktori akan membuat volume `minio_data` baru yang kosong dan seluruh objek tersimpan menjadi tidak terjangkau.
+- **Apache**, bukan nginx, yang aktif di server. Situs `gentan.storage` hanyalah *reverse proxy* ke `127.0.0.1:5000`, dikonfigurasi di `/www/server/panel/vhost/apache/extension/gentan.storage/reverse-proxy.conf`. Berkas itu diletakkan di direktori *extension* aaPanel supaya tetap bertahan ketika panel menulis ulang vhost utama.
+
+PHP, MySQL, dan FTP yang ikut dibuat aaPanel bersama situs tidak dipakai sama sekali oleh aplikasi ini — aman untuk dihapus.
+
+---
+
 ## Menghubungkan Domain (Cloudflare Tunnel)
 
 Server ini berada di belakang NAT dan **tidak punya IPv4 publik sendiri**, jadi A record tidak bisa dipakai. Aplikasi dipublikasikan lewat **Cloudflare Tunnel**, yang membuat koneksi keluar dari server ke edge Cloudflare — tanpa port forwarding dan tanpa membuka port apa pun di router.
