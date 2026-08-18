@@ -243,6 +243,41 @@ Tautan yang tidak valid, sudah dicabut, atau kedaluwarsa selalu dijawab `404` ya
 
 ---
 
+## Menghubungkan Domain (Cloudflare Tunnel)
+
+Server ini berada di belakang NAT dan **tidak punya IPv4 publik sendiri**, jadi A record tidak bisa dipakai. Aplikasi dipublikasikan lewat **Cloudflare Tunnel**, yang membuat koneksi keluar dari server ke edge Cloudflare — tanpa port forwarding dan tanpa membuka port apa pun di router.
+
+### Yang tidak diperlukan
+
+Gentan Storage adalah aplikasi **Node.js di dalam Docker** yang mendengarkan di port `5000`, memakai **SQLite** untuk metadata dan **MinIO** untuk berkas. Jadi jangan membuat situs PHP di panel hosting: PHP, MySQL, FTP, dan direktori `/www/wwwroot/...` sama sekali tidak dipakai aplikasi ini.
+
+### Langkah
+
+1. Buka **Cloudflare Zero Trust → Networks → Tunnels**, pilih tunnel yang sudah berjalan di server.
+2. Tab **Public Hostname → Add a public hostname**.
+3. **Subdomain**: misal `storage` · **Domain**: domain Anda · **Path**: kosongkan.
+4. **Service**: Type `HTTP`, URL `localhost:5000`.
+5. Save. Cloudflare otomatis membuat DNS CNAME (proxied) dan menyediakan HTTPS.
+
+> [!IMPORTANT]
+> **Pakai subdomain satu tingkat.** Universal SSL gratis dari Cloudflare hanya mencakup `domain.com` dan `*.domain.com`. Nama seperti `gentan.storage.domain.com` berada dua tingkat di bawah zona dan **tidak tercakup**, sehingga pengunjung akan mendapat galat sertifikat kecuali Anda berlangganan Advanced Certificate Manager. Gunakan `gentan-storage.domain.com` atau `storage.domain.com`.
+
+### Batas unggah lewat domain
+
+Cloudflare plan Free dan Pro menolak body request di atas **100 MB**. Dasbor sudah menolak berkas sebesar itu lebih dulu dengan pesan yang jelas ketika diakses lewat HTTPS, agar tidak berujung pada halaman galat 413 dari Cloudflare. Untuk berkas lebih besar, unggah lewat alamat lokal server (`http://<ip-lan>:5000`) yang tidak melewati proxy.
+
+### CORS
+
+`CORS_ORIGIN` menerima `*` (bawaan) atau daftar origin dipisah koma:
+
+```ini
+CORS_ORIGIN=https://storage.domain.com,http://192.168.111.5:5000
+```
+
+Perlu diingat, membatasi daftar ini akan memutus aplikasi lain yang memanggil API dari peramban pada origin berbeda. Tag `<img>` dan `<video>` tidak terpengaruh CORS, begitu pula pemanggilan server-ke-server.
+
+---
+
 ## Panduan Akses API & Integrasi Programmatic
 
 ### 1. Mengunggah File via API

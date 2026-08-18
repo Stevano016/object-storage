@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { uploadWithProgress } from '../lib/upload';
+import { checkProxyUploadLimit, uploadWithProgress } from '../lib/upload';
 import type { FileItem, Pagination } from '../types';
 
 const PAGE_SIZE = 24;
@@ -58,6 +58,12 @@ export function useFiles(bucketName: string) {
   const uploadFile = useCallback(async (file: File, onComplete?: () => void) => {
     if (!bucketName) {
       showToast('Pilih bucket terlebih dahulu.', 'error');
+      return;
+    }
+
+    const limitError = checkProxyUploadLimit(file);
+    if (limitError) {
+      showToast(limitError, 'error');
       return;
     }
 

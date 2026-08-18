@@ -8,7 +8,17 @@ dotenv.config();
 export const PORT = Number(process.env.PORT) || 5000;
 export const JWT_SECRET = process.env.JWT_SECRET || 'gentan-secret-key-123456';
 export const JWT_EXPIRES_IN = '7d';
-export const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
+/**
+ * '*' (default) or a comma-separated allowlist, e.g.
+ * "https://storage.example.com,http://192.168.111.5:5000".
+ */
+export const CORS_ORIGIN: string | string[] = (() => {
+  const raw = (process.env.CORS_ORIGIN || '*').trim();
+  if (raw === '*') return '*';
+
+  const origins = raw.split(',').map(origin => origin.trim()).filter(Boolean);
+  return origins.length > 1 ? origins : origins[0] || '*';
+})();
 /**
  * Filesystem whose capacity the dashboard reports. Point this at the mount that
  * actually holds the objects (for MinIO, the volume directory) — otherwise the

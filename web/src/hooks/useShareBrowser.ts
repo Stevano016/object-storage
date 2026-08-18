@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useToast } from '../context/ToastContext';
 import { resolveApiUrl } from '../lib/apiUrl';
-import { uploadWithProgress } from '../lib/upload';
+import { checkProxyUploadLimit, uploadWithProgress } from '../lib/upload';
 import type { FileItem, Pagination, ShareInfo } from '../types';
 
 const PAGE_SIZE = 24;
@@ -86,6 +86,12 @@ export function useShareBrowser(token: string) {
   }, [base, load]);
 
   const uploadFile = useCallback(async (file: File, onComplete?: () => void) => {
+    const limitError = checkProxyUploadLimit(file);
+    if (limitError) {
+      showToast(limitError, 'error');
+      return;
+    }
+
     setUploading(true);
     setUploadProgress(0);
 

@@ -1,3 +1,23 @@
+import { formatBytes } from './format';
+
+/** Cloudflare's Free and Pro plans reject request bodies larger than 100 MB. */
+export const PROXY_UPLOAD_LIMIT_BYTES = 100 * 1024 * 1024;
+
+/**
+ * Returns an error message when a file cannot possibly reach the server, or
+ * null when it can. Only HTTPS origins are checked: that is how the dashboard
+ * is reached through the Cloudflare proxy, while LAN and Tailscale access is
+ * plain HTTP and hits the server directly with no body limit.
+ */
+export function checkProxyUploadLimit(file: File): string | null {
+  if (window.location.protocol !== 'https:' || file.size <= PROXY_UPLOAD_LIMIT_BYTES) {
+    return null;
+  }
+
+  return `Berkas ${formatBytes(file.size)} melampaui batas 100 MB untuk unggahan lewat domain publik. `
+    + 'Untuk berkas sebesar ini, unggah lewat alamat lokal server.';
+}
+
 interface UploadOptions {
   url: string;
   file: File;
