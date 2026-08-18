@@ -92,9 +92,13 @@ function getFolderSize(dirPath: string): number {
 function getDiskUsage(target: string): { total: number; free: number; used: number } | null {
   try {
     const stat = fs.statfsSync(target);
-    const total = stat.blocks * stat.bsize;
-    const free = stat.bavail * stat.bsize;
-    return { total, free, used: total - free };
+    // bavail excludes blocks reserved for root, while bfree does not — using
+    // both keeps "used" honest instead of counting the reserve as consumed.
+    return {
+      total: stat.blocks * stat.bsize,
+      free: stat.bavail * stat.bsize,
+      used: (stat.blocks - stat.bfree) * stat.bsize
+    };
   } catch {
     return null;
   }
