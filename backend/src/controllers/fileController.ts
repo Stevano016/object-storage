@@ -8,33 +8,23 @@ import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
 
+import { getStorageProvider } from '../utils/storageProvider.js';
+
 // Define directories
 const dataDir = path.resolve('data');
-const storageDir = path.join(dataDir, 'storage');
+const tempDir = path.join(dataDir, 'temp');
 
-// Configure Multer disk storage
+if (!fs.existsSync(tempDir)) {
+  fs.mkdirSync(tempDir, { recursive: true });
+}
+
+// Configure Multer temp landing storage
 const storage = multer.diskStorage({
-  destination: async (req: Request, file, cb) => {
-    const { bucketName } = req.params;
-    try {
-      const db = getDb();
-      const bucket = await db.get('SELECT id FROM buckets WHERE name = ?', [bucketName]);
-      if (!bucket) {
-        return cb(new Error('Bucket not found'), '');
-      }
-      
-      const destPath = path.join(storageDir, bucket.id);
-      if (!fs.existsSync(destPath)) {
-        fs.mkdirSync(destPath, { recursive: true });
-      }
-      cb(null, destPath);
-    } catch (err: any) {
-      cb(err, '');
-    }
+  destination: (req: Request, file, cb) => {
+    cb(null, tempDir);
   },
   filename: (req, file, cb) => {
     const fileId = uuidv4();
-    // Keep it generic to prevent directory traversal
     cb(null, `${fileId}.dat`);
   }
 });
@@ -135,10 +125,13 @@ export async function uploadFile(req: AuthenticatedRequest, res: Response) {
     // Sanitize user name for URL safety
     const safeName = encodeURIComponent(file.originalname.replace(/\s+/g, '-'));
 
+    // Upload via storage provider (local disk or MinIO)
+    const storagePath = await getStorageProvider().uploadFile(bucket.id, fileId, file.path, file.mimetype);
+
     await db.run(
       `INSERT INTO files (id, bucket_id, name, original_name, mime_type, size, physical_path)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [fileId, bucket.id, safeName, file.originalname, file.mimetype, file.size, file.path]
+      [fileId, bucket.id, safeName, file.originalname, file.mimetype, file.size, storagePath]
     );
 
     res.status(201).json({
@@ -226,18 +219,15 @@ export async function downloadFile(req: Request, res: Response) {
       }
     }
 
-    const physicalPath = fileRecord.physical_path;
-    if (!fs.existsSync(physicalPath)) {
-      return res.status(404).json({ error: 'Physical file not found on disk.' });
-    }
-
     const fileSize = fileRecord.size;
     const mimeType = fileRecord.mime_type;
 
     // Handle range headers for streaming audio/video (HTTP 206 Partial Content)
-    const range = req.headers.range;
-    if (range) {
-      const parts = range.replace(/bytes=/, '').split('-');
+    const rangeHeader = req.headers.range;
+    let range: { start: number; end: number } | undefined;
+
+    if (rangeHeader) {
+      const parts = rangeHeader.replace(/bytes=/, '').split('-');
       const start = parseInt(parts[0], 10);
       const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
 
@@ -247,28 +237,32 @@ export async function downloadFile(req: Request, res: Response) {
         });
         return;
       }
+      range = { start, end };
+    }
 
-      const chunksize = (end - start) + 1;
-      const fileStream = fs.createReadStream(physicalPath, { start, end });
-
-      res.writeHead(206, {
-        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-        'Accept-Ranges': 'bytes',
-        'Content-Length': chunksize,
-        'Content-Type': mimeType,
-        'Content-Disposition': `inline; filename="${fileRecord.original_name}"`
-      });
-
-      fileStream.pipe(res);
-    } else {
-      // Standard full download/view stream
-      res.writeHead(200, {
-        'Content-Length': fileSize,
-        'Content-Type': mimeType,
-        'Content-Disposition': `inline; filename="${fileRecord.original_name}"`
-      });
-
-      fs.createReadStream(physicalPath).pipe(res);
+    try {
+      const storageResult = await getStorageProvider().getFileStream(bucket.id, fileRecord.id, range);
+      
+      if (range) {
+        res.writeHead(206, {
+          'Content-Range': `bytes ${range.start}-${range.end}/${fileSize}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': storageResult.size,
+          'Content-Type': mimeType,
+          'Content-Disposition': `inline; filename="${fileRecord.original_name}"`
+        });
+      } else {
+        res.writeHead(200, {
+          'Content-Length': fileSize,
+          'Content-Type': mimeType,
+          'Content-Disposition': `inline; filename="${fileRecord.original_name}"`
+        });
+      }
+      
+      storageResult.stream.pipe(res);
+    } catch (err) {
+      console.error('File stream error:', err);
+      res.status(404).json({ error: 'Physical file not found.' });
     }
   } catch (error) {
     console.error('Download/stream file error:', error);
@@ -296,10 +290,8 @@ export async function deleteFile(req: AuthenticatedRequest, res: Response) {
       return res.status(404).json({ error: 'File not found.' });
     }
 
-    // Delete physically from disk
-    if (fs.existsSync(fileRecord.physical_path)) {
-      fs.unlinkSync(fileRecord.physical_path);
-    }
+    // Delete physically via storage provider
+    await getStorageProvider().deleteFile(bucket.id, fileRecord.id);
 
     // Delete from database
     await db.run('DELETE FROM files WHERE id = ?', [fileId]);

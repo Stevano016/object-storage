@@ -110,6 +110,44 @@ Unggah berkas-berkas berikut dari komputer lokal Anda ke VPS Anda (misalnya ke `
 
 ---
 
+## Panduan Self-Hosting MinIO (Object Storage) di VPS
+
+Aplikasi ini mendukung penyimpanan lokal di disk server maupun penyimpanan berbasis **MinIO (S3-compatible Object Storage)**. MinIO sangat direkomendasikan untuk produksi karena performanya yang stabil, andal, dan kompatibel dengan API standar S3 AWS.
+
+### 1. Menjalankan MinIO dengan Docker Compose
+Di folder root proyek, sudah disediakan file `docker-compose.yml`. Untuk menjalankan MinIO di VPS:
+1. Pastikan **Docker** dan **Docker Compose** sudah terinstal di VPS Anda.
+2. Jalankan perintah berikut untuk mengaktifkan MinIO di background:
+   ```bash
+   docker compose up -d
+   ```
+3. MinIO akan berjalan pada dua port:
+   - **`Port 9000`**: S3 API Endpoint (digunakan oleh backend aplikasi kita).
+   - **`Port 9001`**: Web Console Admin (digunakan untuk login visual via browser, default: `minioadmin` / `minioadminpassword`).
+
+### 2. Menghubungkan Aplikasi ke MinIO
+Ubah file konfigurasi `backend/.env` di VPS Anda untuk mengalihkan penyimpanan dari disk lokal ke MinIO:
+```ini
+# Ubah provider penyimpanan ke 'minio'
+STORAGE_PROVIDER=minio
+
+# Konfigurasi S3 Endpoint MinIO
+S3_ENDPOINT=http://localhost:9000
+S3_ACCESS_KEY_ID=minioadmin
+S3_SECRET_ACCESS_KEY=minioadminpassword
+S3_REGION=us-east-1
+S3_BUCKET_PREFIX=gentan-
+S3_FORCE_PATH_STYLE=true
+```
+
+Setelah mengubah konfigurasi `.env`, **restart** proses backend di PM2:
+```bash
+pm2 restart gentan-storage
+```
+Aplikasi Anda kini akan mengunggah file-file biner langsung ke MinIO, sementara metadata file tetap tersimpan di database SQLite lokal untuk performa query pencarian yang cepat.
+
+---
+
 ## Panduan Akses API & Integrasi Programmatic
 
 ### 1. Mengunggah File via API

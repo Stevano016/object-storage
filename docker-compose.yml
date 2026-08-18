@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: gentan-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000" # S3 API endpoint
+      - "9001:9001" # Web Console admin interface
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadminpassword # Ganti ini dengan password yang kuat saat deploy di VPS!
+    volumes:
+      - minio_data:/data
+    restart: always
+
+volumes:
+  minio_data:
+    driver: local

@@ -4,6 +4,7 @@ import { AuthenticatedRequest } from '../middleware/auth.js';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
+import { getStorageProvider } from '../utils/storageProvider.js';
 
 export async function listBuckets(req: AuthenticatedRequest, res: Response) {
   try {
@@ -72,11 +73,8 @@ export async function createBucket(req: AuthenticatedRequest, res: Response) {
       [bucketId, name, isPublicInt]
     );
 
-    // Create a folder physically for this bucket
-    const bucketPath = path.resolve('data', 'storage', bucketId);
-    if (!fs.existsSync(bucketPath)) {
-      fs.mkdirSync(bucketPath, { recursive: true });
-    }
+    // Create via storage provider (local disk or MinIO S3)
+    await getStorageProvider().createBucket(bucketId);
 
     res.status(201).json({
       id: bucketId,
@@ -102,20 +100,16 @@ export async function deleteBucket(req: AuthenticatedRequest, res: Response) {
     }
 
     // Get all files in this bucket to delete them physically first
-    const files = await db.all('SELECT physical_path FROM files WHERE bucket_id = ?', [bucket.id]);
+    const files = await db.all('SELECT id FROM files WHERE bucket_id = ?', [bucket.id]);
     
-    // Delete files physically
+    // Delete files physically via storage provider
+    const storage = getStorageProvider();
     for (const file of files) {
-      if (fs.existsSync(file.physical_path)) {
-        fs.unlinkSync(file.physical_path);
-      }
+      await storage.deleteFile(bucket.id, file.id);
     }
 
-    // Delete bucket directory
-    const bucketPath = path.resolve('data', 'storage', bucket.id);
-    if (fs.existsSync(bucketPath)) {
-      fs.rmSync(bucketPath, { recursive: true, force: true });
-    }
+    // Delete bucket directory via storage provider
+    await storage.deleteBucket(bucket.id);
 
     // Delete from DB (foreign keys ON DELETE CASCADE will handle the database rows)
     await db.run('DELETE FROM buckets WHERE id = ?', [bucket.id]);
