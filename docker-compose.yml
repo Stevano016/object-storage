@@ -15,6 +15,30 @@ services:
       - minio_data:/data
     restart: always
 
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gentan-storage-app
+    ports:
+      - "5000:5000" # Web Dashboard dan REST API
+    environment:
+      PORT: 5000
+      JWT_SECRET: gentan-secret-key-123456 # Ganti ini dengan secret key yang kuat
+      CORS_ORIGIN: "*"
+      STORAGE_PROVIDER: minio
+      S3_ENDPOINT: http://minio:9000 # Menggunakan hostname internal Docker network
+      S3_ACCESS_KEY_ID: minioadmin
+      S3_SECRET_ACCESS_KEY: minioadminpassword # Harus sama dengan MINIO_ROOT_PASSWORD di atas
+      S3_REGION: us-east-1
+      S3_BUCKET_PREFIX: gentan-
+      S3_FORCE_PATH_STYLE: "true"
+    volumes:
+      - ./backend/data:/app/backend/data # Menyimpan database SQLite secara persisten di host VPS
+    depends_on:
+      - minio
+    restart: always
+
 volumes:
   minio_data:
     driver: local
