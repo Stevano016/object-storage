@@ -1,4 +1,8 @@
-version: '3.8'
+# Pinned so the stack keeps the same container, network and VOLUME names no
+# matter which directory it is deployed from. Without this, Compose derives the
+# project name from the folder and a move would silently create an empty
+# minio_data volume, orphaning every stored object.
+name: object-storage
 
 services:
   minio:
