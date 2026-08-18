@@ -243,6 +243,52 @@ Tautan yang tidak valid, sudah dicabut, atau kedaluwarsa selalu dijawab `404` ya
 
 ---
 
+## Database: SQLite atau MySQL
+
+Metadata (pengguna, bucket, berkas, API key, tautan berbagi) disimpan di salah satu dari dua engine, dipilih lewat `DB_CLIENT`. Berkas biner tetap di MinIO, apa pun pilihannya.
+
+| | `sqlite` (bawaan) | `mysql` |
+| --- | --- | --- |
+| Setup | tanpa konfigurasi | butuh server MySQL/MariaDB |
+| Lokasi data | `backend/data/database.sqlite` | database di server MySQL |
+| Cocok untuk | pengembangan lokal | produksi, agar bisa dibackup lewat panel |
+
+Konfigurasi di `.env`:
+
+```ini
+DB_CLIENT=mysql
+DB_HOST=host.docker.internal   # MySQL yang berjalan di host, dari dalam container
+DB_PORT=3306
+DB_USER=nama_user
+DB_PASSWORD=password_user
+DB_NAME=nama_database
+```
+
+### Memindahkan data SQLite ke MySQL
+
+```bash
+cd /www/wwwroot/gentan.storage
+docker compose run --rm -e DB_CLIENT=mysql app node dist/scripts/migrate-to-mysql.js
+```
+
+Skrip ini membuat skema, menyalin seluruh tabel sesuai urutan foreign key, menormalkan dua format tanggal peninggalan SQLite, lalu mencocokkan jumlah baris sumber dan tujuan. Skrip **menolak berjalan bila database tujuan sudah berisi data**, kecuali diberi `--replace`, supaya dua dataset tidak pernah tercampur diam-diam. Jalankan sebelum server pertama kali dinyalakan dengan `DB_CLIENT=mysql`, agar tidak ada admin bawaan yang ikut ter-seed.
+
+Setelah migrasi sukses, ubah `DB_CLIENT=mysql` di `.env` lalu `docker compose up -d`. Berkas SQLite lama sengaja tidak dihapus dan bisa dipakai untuk kembali kapan saja.
+
+### Dua syarat agar container bisa menjangkau MySQL di host
+
+1. **Izin firewall.** Server ini memakai UFW dengan policy `DROP`, sehingga port 3306 tidak terjangkau dari jaringan Docker. Buka khusus untuk subnet bridge Docker, bukan untuk publik:
+
+   ```bash
+   ufw allow from 172.16.0.0/12 to any port 3306 proto tcp
+   ```
+
+2. **Izin host pada user database.** User yang dibuat panel biasanya hanya boleh terhubung dari `localhost`, sedangkan koneksi dari container datang sebagai `172.x.x.x`. Di aaPanel, buka Databases → pilih database → atur izin aksesnya agar mengizinkan koneksi dari luar localhost.
+
+Tanpa keduanya, koneksi akan `ETIMEDOUT` (firewall) atau `ER_ACCESS_DENIED_ERROR` (izin host).
+
+---
+
 ## Lokasi Deployment di Server
 
 Stack berjalan di **`/www/wwwroot/gentan.storage`** pada VPS Server Gentan — direktori situs aaPanel yang isinya adalah clone repositori ini. Memperbarui aplikasi cukup:
@@ -252,6 +298,8 @@ cd /www/wwwroot/gentan.storage
 git pull
 docker compose up -d --build
 ```
+
+Seluruh rahasia dibaca dari berkas `.env` di direktori yang sama (lihat `backend/.env.example` untuk daftar lengkapnya). Berkas itu tidak masuk Git, dan `docker-compose.yml` menandai `JWT_SECRET`, `MINIO_ROOT_USER`, serta `MINIO_ROOT_PASSWORD` sebagai wajib — stack menolak menyala kalau salah satunya kosong, supaya tidak pernah diam-diam memakai nilai bawaan yang terpampang di repositori ini.
 
 Dua hal yang tidak boleh diubah sembarangan:
 
