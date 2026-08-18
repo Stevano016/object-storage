@@ -37,6 +37,13 @@ Seluruh komponen dasar Object Storage (**Gentan Storage**) untuk VPS Server Gent
 5. **Quality Assurance & Perbaikan Tipe**:
    - Menyelesaikan error kompilasi TypeScript terkait variable tidak terpakai (`Shield`, `ExternalLink`, `statsLoading`, `useEffect`), safe token parameter checking (`token?.substring`), dan style property typo (`justifyCenter` -> `justifyContent`).
    - Memastikan `npm run build` sukses 100% untuk backend dan frontend.
+6. **Integrasi MinIO & Git Push**:
+   - Menghubungkan repositori lokal dan melakukan *initial commit*.
+   - Melakukan push kode dasar ke repositori GitHub privat pengguna di `https://github.com/Stevano016/object-storage.git`.
+   - Mengembangkan `storageProvider.ts` untuk abstraksi penyimpanan dinamis (`local` atau `minio`/`s3`).
+   - Mengintegrasikan AWS S3 SDK pada `bucketController.ts` dan `fileController.ts` agar mendukung unggah, hapus, dan stream data privat langsung ke server MinIO.
+   - Membuat file `docker-compose.yml` untuk mempermudah pemasangan dan hosting mandiri (*self-host*) kontainer MinIO di VPS Server Gentan.
+   - Mengunggah revisi kode integrasi MinIO ini ke GitHub pada commit kedua.
 
 ## Kredensial Default (Inisialisasi)
 - **Username**: `admin`
@@ -45,4 +52,6 @@ Seluruh komponen dasar Object Storage (**Gentan Storage**) untuk VPS Server Gent
 
 ## Langkah Selanjutnya (Untuk User)
 1. Jalankan aplikasi di lokal terlebih dahulu untuk pengujian (`npm run dev` pada backend dan frontend).
-2. Ikuti instruksi pada [README.md](file:///D:/Coding/Object/Storage/README.md) bagian "Panduan Deployment ke VPS" untuk memindahkan dan menjalankan aplikasi di **Server Gentan (VPS)** menggunakan **PM2**.
+2. Nyalakan layanan MinIO di VPS Anda menggunakan perintah `docker compose up -d` di root folder.
+3. Ubah setting `STORAGE_PROVIDER` ke `minio` pada file `.env` di server backend Anda, lalu masukkan kredensial MinIO Anda.
+4. Ikuti instruksi pada [README.md](file:///D:/Coding/Object/Storage/README.md) bagian "Panduan Deployment ke VPS" untuk memindahkan dan menjalankan aplikasi di **Server Gentan (VPS)** menggunakan **PM2**.
