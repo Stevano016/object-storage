@@ -4,17 +4,21 @@
 # minio_data volume, orphaning every stored object.
 name: object-storage
 
+# Every secret comes from the .env file next to this one — see .env.example.
+# Values marked with :? are required, so the stack refuses to start with a
+# half-configured environment instead of falling back to a published default.
+
 services:
   minio:
     image: quay.io/minio/minio:latest
     container_name: gentan-minio
     command: server /data --console-address ":9001"
     ports:
-      - "9010:9000" # S3 API endpoint (Port 9000 di host ditempati Portainer)
-      - "9001:9001" # Web Console admin interface
+      - "${MINIO_API_PORT:-9010}:9000" # S3 API endpoint (host 9000 is taken by Portainer)
+      - "${MINIO_CONSOLE_PORT:-9001}:9001" # Web console admin interface
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadminpassword # Ganti ini dengan password yang kuat saat deploy di VPS!
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
     volumes:
       - minio_data:/data
     restart: always
@@ -25,24 +29,38 @@ services:
       dockerfile: Dockerfile
     container_name: gentan-storage-app
     ports:
-      - "5000:5000" # Web Dashboard dan REST API
+      - "${APP_PORT:-5000}:5000" # Web dashboard and REST API
     environment:
       PORT: 5000
-      JWT_SECRET: gentan-secret-key-123456 # Ganti ini dengan secret key yang kuat
-      CORS_ORIGIN: "*"
-      STORAGE_PROVIDER: minio
-      S3_ENDPOINT: http://minio:9000 # Menggunakan hostname internal Docker network
-      S3_ACCESS_KEY_ID: minioadmin
-      S3_SECRET_ACCESS_KEY: minioadminpassword # Harus sama dengan MINIO_ROOT_PASSWORD di atas
-      S3_REGION: us-east-1
-      S3_BUCKET_PREFIX: gentan-
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-524288000}
+
+      # Metadata store: 'sqlite' (file in backend/data) or 'mysql'
+      DB_CLIENT: ${DB_CLIENT:-sqlite}
+      DB_HOST: ${DB_HOST:-host.docker.internal}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER:-}
+      DB_PASSWORD: ${DB_PASSWORD:-}
+      DB_NAME: ${DB_NAME:-}
+
+      # Object store: the binaries themselves
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-minio}
+      S3_ENDPOINT: http://minio:9000 # internal Docker network hostname
+      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
+      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET_PREFIX: ${S3_BUCKET_PREFIX:-gentan-}
       S3_FORCE_PATH_STYLE: "true"
-      # Dasbor melaporkan kapasitas filesystem ini. Diarahkan ke volume MinIO
-      # agar angka yang tampil adalah kapasitas penyimpanan objek yang sebenarnya.
+
+      # Report the capacity of the filesystem that actually holds the objects
       DISK_REPORT_PATH: /mnt/objectstore
     volumes:
-      - ./backend/data:/app/backend/data # Menyimpan database SQLite secara persisten di host VPS
-      - minio_data:/mnt/objectstore:ro # Hanya untuk membaca kapasitas disk (read-only)
+      - ./backend/data:/app/backend/data # SQLite database and upload staging
+      - minio_data:/mnt/objectstore:ro # read-only, only to report disk capacity
+    extra_hosts:
+      # Lets DB_HOST=host.docker.internal reach a MySQL running on the host.
+      - "host.docker.internal:host-gateway"
     depends_on:
       - minio
     restart: always

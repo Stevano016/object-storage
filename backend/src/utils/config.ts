@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import path from 'path';
 
 // Loaded here (instead of in server.ts) so that every module reading process.env
 // at import time sees the .env values — ES module imports are evaluated before
@@ -25,4 +26,15 @@ export const CORS_ORIGIN: string | string[] = (() => {
  * app data partition is reported, which can be a much smaller disk.
  */
 export const DISK_REPORT_PATH = process.env.DISK_REPORT_PATH || '';
+// --- Database -------------------------------------------------------------
+/** 'sqlite' (default, zero setup) or 'mysql'. */
+export const DB_CLIENT = (process.env.DB_CLIENT || 'sqlite').toLowerCase();
+export const DB_HOST = process.env.DB_HOST || '127.0.0.1';
+export const DB_PORT = Number(process.env.DB_PORT) || 3306;
+export const DB_USER = process.env.DB_USER || 'root';
+export const DB_PASSWORD = process.env.DB_PASSWORD || '';
+export const DB_NAME = process.env.DB_NAME || 'gentan_storage';
+/** Only used when DB_CLIENT is 'sqlite'. */
+export const SQLITE_FILE = process.env.SQLITE_FILE || path.resolve('data', 'database.sqlite');
+
 export const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES) || 500 * 1024 * 1024;

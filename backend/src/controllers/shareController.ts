@@ -72,17 +72,19 @@ export async function createShare(req: AuthenticatedRequest, res: Response) {
     return res.status(400).json({ error: `Permission must be one of: ${PERMISSIONS.join(', ')}.` });
   }
 
-  let expiresAt: string | null = null;
+  let expiryDate: Date | null = null;
   if (expiresInDays !== undefined && expiresInDays !== null && expiresInDays !== '') {
     const days = Number(expiresInDays);
     if (!Number.isFinite(days) || days <= 0 || days > MAX_EXPIRY_DAYS) {
       return res.status(400).json({ error: `Expiry must be between 1 and ${MAX_EXPIRY_DAYS} days.` });
     }
-    expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+    expiryDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
   }
 
   try {
     const db = getDb();
+    // Each engine binds DATETIME differently, so let the driver decide.
+    const expiresAt = expiryDate ? db.toTimestamp(expiryDate) : null;
     const bucket = await db.get('SELECT id FROM buckets WHERE name = ?', [bucketName]);
 
     if (!bucket) {
