@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { uploadWithProgress } from '../lib/upload';
 import type { FileItem, Pagination } from '../types';
 
 const PAGE_SIZE = 24;
@@ -54,11 +55,7 @@ export function useFiles(bucketName: string) {
 
   const reload = useCallback(() => load(page, search), [load, page, search]);
 
-  /**
-   * Uploads through XMLHttpRequest rather than fetch, because only XHR reports
-   * upload progress — important for the large media files this server targets.
-   */
-  const uploadFile = useCallback((file: File, onComplete?: () => void) => {
+  const uploadFile = useCallback(async (file: File, onComplete?: () => void) => {
     if (!bucketName) {
       showToast('Pilih bucket terlebih dahulu.', 'error');
       return;
@@ -67,48 +64,22 @@ export function useFiles(bucketName: string) {
     setUploading(true);
     setUploadProgress(0);
 
-    const xhr = new XMLHttpRequest();
-    const formData = new FormData();
-    formData.append('file', file);
-
-    xhr.open('POST', `${apiUrl}/api/buckets/${bucketName}/files`);
-    if (token) {
-      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    try {
+      await uploadWithProgress({
+        url: `${apiUrl}/api/buckets/${bucketName}/files`,
+        file,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        onProgress: setUploadProgress
+      });
+      showToast(`Berkas '${file.name}' berhasil diunggah.`);
+      await load(1, search);
+      onComplete?.();
+    } catch (error) {
+      showToast((error as Error).message, 'error');
+    } finally {
+      setUploading(false);
+      setUploadProgress(null);
     }
-
-    xhr.upload.onprogress = event => {
-      if (event.lengthComputable) {
-        setUploadProgress(Math.round((event.loaded / event.total) * 100));
-      }
-    };
-
-    xhr.onload = () => {
-      setUploading(false);
-      setUploadProgress(null);
-
-      if (xhr.status >= 200 && xhr.status < 300) {
-        showToast(`Berkas '${file.name}' berhasil diunggah.`);
-        void load(1, search);
-        onComplete?.();
-        return;
-      }
-
-      let message = 'Gagal mengunggah berkas.';
-      try {
-        message = JSON.parse(xhr.responseText).error || message;
-      } catch {
-        // Non-JSON error body (e.g. a proxy timeout page): keep the default text.
-      }
-      showToast(message, 'error');
-    };
-
-    xhr.onerror = () => {
-      setUploading(false);
-      setUploadProgress(null);
-      showToast('Jaringan bermasalah saat mengunggah.', 'error');
-    };
-
-    xhr.send(formData);
   }, [bucketName, apiUrl, token, showToast, load, search]);
 
   const deleteFile = useCallback(async (fileId: string): Promise<boolean> => {

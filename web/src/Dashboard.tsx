@@ -12,6 +12,7 @@ import { FilesPage } from './pages/FilesPage';
 import { KeysPage } from './pages/KeysPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { SharesPage } from './pages/SharesPage';
 import { UsersPage } from './pages/UsersPage';
 import type { TabId } from './types';
 
@@ -118,6 +119,8 @@ export function Dashboard() {
               onOpenBucket={handleOpenBucket}
             />
           )}
+
+          {activeTab === 'shares' && isSuperAdmin && <SharesPage buckets={buckets} />}
 
           {activeTab === 'keys' && isSuperAdmin && (
             <KeysPage onKeysChanged={() => void refreshStats()} />

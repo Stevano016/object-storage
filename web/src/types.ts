@@ -59,6 +59,30 @@ export interface Pagination {
   pages: number;
 }
 
+export type SharePermission = 'viewer' | 'editor';
+
+export interface ShareLink {
+  id: string;
+  token: string;
+  permission: SharePermission;
+  label: string | null;
+  bucketName: string;
+  fileId: string | null;
+  fileName: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  path: string;
+}
+
+/** What a visitor holding a share link is told about it. */
+export interface ShareInfo {
+  permission: SharePermission;
+  bucketName: string;
+  label: string | null;
+  scope: 'bucket' | 'file';
+  expiresAt: string | null;
+}
+
 export type ToastType = 'success' | 'error' | 'info';
 
 export interface ToastMessage {
@@ -67,4 +91,4 @@ export interface ToastMessage {
   text: string;
 }
 
-export type TabId = 'overview' | 'buckets' | 'files' | 'keys' | 'users' | 'settings';
+export type TabId = 'overview' | 'buckets' | 'files' | 'shares' | 'keys' | 'users' | 'settings';

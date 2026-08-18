@@ -1,56 +1,22 @@
-import { Download, Trash2 } from 'lucide-react';
-import { Modal } from '../ui/Modal';
-import { FileTypeIcon } from '../ui/FileTypeIcon';
+import { useState } from 'react';
+import { Link2 } from 'lucide-react';
+import { FilePreviewModal } from './FilePreviewModal';
+import type { PreviewLink } from './FilePreviewModal';
+import { Spinner } from '../ui/Spinner';
 import { useAuth } from '../../context/AuthContext';
-import { useClipboard } from '../../hooks/useClipboard';
-import { buildFileUrl, buildPublicFileUrl, getFileKind } from '../../lib/files';
-import { formatBytes, formatDateTime } from '../../lib/format';
-import type { Bucket, FileItem } from '../../types';
+import { buildFileUrl, buildPublicFileUrl, buildShareUrl } from '../../lib/files';
+import type { Bucket, FileItem, ShareLink } from '../../types';
 
 interface FileDetailModalProps {
   file: FileItem;
   bucketName: string;
   bucket: Bucket | undefined;
   canDelete: boolean;
+  canShare: boolean;
   onDelete: (fileId: string) => void;
+  /** Mints a public, login-free link to this single file. */
+  onCreateShare: (fileId: string) => Promise<ShareLink | null>;
   onClose: () => void;
-}
-
-interface LinkRowProps {
-  label: string;
-  url: string;
-  onCopy: () => void;
-  warning?: boolean;
-}
-
-function LinkRow({ label, url, onCopy, warning = false }: LinkRowProps) {
-  return (
-    <div>
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        fontSize: '0.8rem',
-        marginBottom: '0.25rem',
-        color: warning ? 'var(--warning)' : undefined
-      }}>
-        <span>{label}</span>
-        <button
-          style={{
-            border: 'none',
-            background: 'none',
-            color: 'var(--accent-primary)',
-            cursor: 'pointer',
-            fontSize: '0.8rem',
-            fontWeight: 600
-          }}
-          onClick={onCopy}
-        >
-          Salin Link
-        </button>
-      </div>
-      <code style={{ fontSize: '0.8rem', wordBreak: 'break-all', display: 'block' }}>{url}</code>
-    </div>
-  );
 }
 
 export function FileDetailModal({
@@ -58,104 +24,77 @@ export function FileDetailModal({
   bucketName,
   bucket,
   canDelete,
+  canShare,
   onDelete,
+  onCreateShare,
   onClose
 }: FileDetailModalProps) {
   const { apiUrl, token } = useAuth();
-  const copy = useClipboard();
+  const [share, setShare] = useState<ShareLink | null>(null);
+  const [sharing, setSharing] = useState(false);
 
-  const kind = getFileKind(file.mimeType);
   const isPrivate = bucket ? !bucket.isPublic : false;
-  const mediaUrl = buildFileUrl({ apiUrl, bucket, bucketName, file, token });
-  const publicUrl = buildPublicFileUrl(apiUrl, bucketName, file);
-  const maskedTokenUrl = `${publicUrl}&token=${token ? `${token.substring(0, 15)}...` : ''}`;
+  const credential = isPrivate && token ? ({ kind: 'token', value: token } as const) : undefined;
 
-  const handleDelete = () => {
-    if (window.confirm('Hapus berkas ini secara permanen dari server?')) {
-      onDelete(file.id);
-    }
+  const mediaUrl = buildFileUrl({ apiUrl, bucketName, file, credential });
+  const downloadUrl = buildFileUrl({ apiUrl, bucketName, file, credential, download: true });
+  const directUrl = buildPublicFileUrl(apiUrl, bucketName, file);
+
+  const links: PreviewLink[] = [
+    isPrivate
+      ? {
+          label: 'URL langsung (butuh login atau API key):',
+          display: directUrl,
+          copyValue: directUrl,
+          warning: true
+        }
+      : {
+          label: 'URL publik (bisa dibuka siapa saja):',
+          display: directUrl,
+          copyValue: directUrl
+        }
+  ];
+
+  if (isPrivate && token) {
+    links.push({
+      label: 'Tautan terotentikasi (JWT, ikut kedaluwarsa sesi):',
+      display: `${directUrl}&token=${token.substring(0, 15)}...`,
+      copyValue: mediaUrl,
+      warning: true
+    });
+  }
+
+  if (share) {
+    links.push({
+      label: 'Tautan berbagi publik — tanpa login:',
+      display: buildShareUrl(apiUrl, share.token),
+      copyValue: buildShareUrl(apiUrl, share.token)
+    });
+  }
+
+  const handleShare = async () => {
+    setSharing(true);
+    const created = await onCreateShare(file.id);
+    setSharing(false);
+    if (created) setShare(created);
   };
 
   return (
-    <Modal
-      title={`Detail: ${file.originalName}`}
+    <FilePreviewModal
+      file={file}
+      mediaUrl={mediaUrl}
+      downloadUrl={downloadUrl}
+      links={links}
+      onDelete={canDelete ? () => onDelete(file.id) : undefined}
       onClose={onClose}
-      large
-      closeOnOverlayClick
-      footer={
-        <>
-          {canDelete && (
-            <button className="btn btn-danger" style={{ marginRight: 'auto' }} onClick={handleDelete}>
-              <Trash2 style={{ width: 16, height: 16 }} />
-              Hapus Berkas
-            </button>
-          )}
-          <a className="btn btn-secondary" href={mediaUrl} target="_blank" rel="noopener noreferrer">
-            <Download style={{ width: 16, height: 16 }} />
-            Unduh
-          </a>
-          <button className="btn btn-primary" onClick={onClose}>Tutup</button>
-        </>
+      extraActions={
+        canShare && !share ? (
+          <button className="btn btn-secondary" onClick={() => void handleShare()} disabled={sharing}>
+            {sharing ? <Spinner size={16} /> : <Link2 style={{ width: 16, height: 16 }} />}
+            Buat Tautan Berbagi
+          </button>
+        ) : undefined
       }
-    >
-      <div className="media-preview-container">
-        <div className="media-viewer">
-          {kind === 'image' ? (
-            <img src={mediaUrl} alt={file.originalName} />
-          ) : kind === 'video' ? (
-            <video controls preload="metadata" playsInline src={mediaUrl} />
-          ) : kind === 'audio' ? (
-            <audio controls preload="metadata" src={mediaUrl} style={{ width: '100%' }} />
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-              <FileTypeIcon mimeType={file.mimeType} />
-              <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-                Pratinjau media tidak tersedia untuk tipe berkas ini.
-              </span>
-            </div>
-          )}
-        </div>
-
-        <div className="file-details-list">
-          <div className="detail-item">
-            <span className="detail-label">Nama Asli</span>
-            <span className="detail-value">{file.originalName}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-label">Tipe File</span>
-            <span className="detail-value">{file.mimeType}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-label">Ukuran</span>
-            <span className="detail-value">{formatBytes(file.size)}</span>
-          </div>
-          <div className="detail-item">
-            <span className="detail-label">Tanggal Unggah</span>
-            <span className="detail-value">{formatDateTime(file.createdAt)}</span>
-          </div>
-        </div>
-
-        <div className="dashboard-panel" style={{ backgroundColor: 'var(--bg-primary)' }}>
-          <span className="detail-label" style={{ marginBottom: '0.5rem', display: 'block' }}>
-            Tautan Berkas
-          </span>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <LinkRow
-              label="URL Stream / Download:"
-              url={publicUrl}
-              onCopy={() => void copy(publicUrl)}
-            />
-            {isPrivate && (
-              <LinkRow
-                label="Tautan Terotentikasi (JWT Token):"
-                url={maskedTokenUrl}
-                onCopy={() => void copy(mediaUrl)}
-                warning
-              />
-            )}
-          </div>
-        </div>
-      </div>
-    </Modal>
+    />
   );
 }

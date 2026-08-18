@@ -15,6 +15,17 @@ import { listBuckets, createBucket, updateBucket, deleteBucket } from './control
 import { upload, listFiles, uploadFile, downloadFile, deleteFile } from './controllers/fileController.js';
 import { listAPIKeys, createAPIKey, deleteAPIKey } from './controllers/keyController.js';
 import { listUsers, createUser, updateUser, deleteUser } from './controllers/userController.js';
+import { resolveShare, requireShareEditor } from './middleware/share.js';
+import {
+  listShares,
+  createShare,
+  updateShare,
+  deleteShare,
+  getSharedInfo,
+  listSharedFiles,
+  uploadSharedFile,
+  deleteSharedFile
+} from './controllers/shareController.js';
 
 const app = express();
 
@@ -55,6 +66,18 @@ app.post('/api/users', authenticateJWT, requireSuperAdmin, createUser);
 app.put('/api/users/:id', authenticateJWT, requireSuperAdmin, updateUser);
 app.delete('/api/users/:id', authenticateJWT, requireSuperAdmin, deleteUser);
 
+// --- Share links: management is privileged, usage is anonymous ---
+app.get('/api/shares', authenticateJWT, requireSuperAdmin, listShares);
+app.post('/api/shares', authenticateJWT, requireSuperAdmin, createShare);
+app.put('/api/shares/:id', authenticateJWT, requireSuperAdmin, updateShare);
+app.delete('/api/shares/:id', authenticateJWT, requireSuperAdmin, deleteShare);
+
+// The token in the URL is the whole credential — no session required.
+app.get('/api/share/:token', resolveShare, getSharedInfo);
+app.get('/api/share/:token/files', resolveShare, listSharedFiles);
+app.post('/api/share/:token/files', resolveShare, requireShareEditor, upload.single('file'), uploadSharedFile);
+app.delete('/api/share/:token/files/:fileId', resolveShare, requireShareEditor, deleteSharedFile);
+
 // Public/private storage router (outside /api for cleaner URLs).
 // downloadFile authorizes internally so HTML5 media players can stream directly.
 app.get('/s/:bucketName/:filename', downloadFile);
@@ -69,7 +92,9 @@ if (fs.existsSync(webDistPath)) {
   console.log(`Serving static web assets from: ${webDistPath}`);
   app.use(express.static(webDistPath));
   app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/s')) {
+    // Note the trailing slashes: '/s' alone would also swallow '/share/:token',
+    // which must be handed to the SPA so the public share page can render.
+    if (req.path.startsWith('/api/') || req.path.startsWith('/s/')) {
       return next();
     }
     res.sendFile(path.join(webDistPath, 'index.html'));

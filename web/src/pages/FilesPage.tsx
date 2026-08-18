@@ -7,6 +7,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
 import { useAuth } from '../context/AuthContext';
 import { useFiles } from '../hooks/useFiles';
+import { useShares } from '../hooks/useShares';
 import { buildFileUrl } from '../lib/files';
 import type { Bucket, FileItem } from '../types';
 
@@ -25,6 +26,7 @@ export function FilesPage({
   onStorageChanged
 }: FilesPageProps) {
   const { apiUrl, token, isSuperAdmin } = useAuth();
+  const { createShare } = useShares();
   const {
     files,
     loading,
@@ -43,6 +45,10 @@ export function FilesPage({
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
 
   const bucket = buckets.find(item => item.name === activeBucket);
+  // Private buckets need the session token attached to preview and download URLs.
+  const credential = bucket && !bucket.isPublic && token
+    ? ({ kind: 'token', value: token } as const)
+    : undefined;
 
   const handleUpload = (file: File) => {
     uploadFile(file, () => {
@@ -131,7 +137,7 @@ export function FilesPage({
               <FileCard
                 key={file.id}
                 file={file}
-                previewUrl={buildFileUrl({ apiUrl, bucket, bucketName: activeBucket, file, token })}
+                previewUrl={buildFileUrl({ apiUrl, bucketName: activeBucket, file, credential })}
                 onSelect={setSelectedFile}
               />
             ))}
@@ -177,7 +183,14 @@ export function FilesPage({
           bucketName={activeBucket}
           bucket={bucket}
           canDelete={isSuperAdmin}
+          canShare={isSuperAdmin}
           onDelete={fileId => void handleDelete(fileId)}
+          onCreateShare={fileId => createShare({
+            bucketName: activeBucket,
+            fileId,
+            permission: 'viewer',
+            label: `Berkas: ${selectedFile.originalName}`
+          })}
           onClose={() => setSelectedFile(null)}
         />
       )}

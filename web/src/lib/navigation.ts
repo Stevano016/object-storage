@@ -1,4 +1,4 @@
-import { File, Folder, HardDrive, Key, Settings, Users } from 'lucide-react';
+import { File, Folder, HardDrive, Key, Link2, Settings, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { TabId } from '../types';
 
@@ -14,6 +14,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'overview', label: 'Overview', icon: HardDrive },
   { id: 'files', label: 'File Browser', icon: File },
   { id: 'buckets', label: 'Buckets', icon: Folder, superAdminOnly: true },
+  { id: 'shares', label: 'Tautan Berbagi', icon: Link2, superAdminOnly: true },
   { id: 'keys', label: 'API Keys', icon: Key, superAdminOnly: true },
   { id: 'users', label: 'Manajemen User', icon: Users, superAdminOnly: true },
   { id: 'settings', label: 'Settings', icon: Settings }

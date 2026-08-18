@@ -1,9 +1,10 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
 import multer from 'multer';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { getDb } from '../utils/db.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
+import { resolveShareToken } from '../middleware/share.js';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
@@ -37,65 +38,143 @@ export const upload = multer({
   }
 });
 
+export interface FileDto {
+  id: string;
+  name: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  createdAt: string;
+}
+
+interface ListOptions {
+  page: number;
+  limit: number;
+  search: string;
+  /** Restricts the listing to a single file, for file-scoped share links. */
+  fileId?: string | null;
+}
+
+const toFileDto = (row: any): FileDto => ({
+  id: row.id,
+  name: row.name,
+  originalName: row.original_name,
+  mimeType: row.mime_type,
+  size: row.size,
+  createdAt: row.created_at
+});
+
+// ---------------------------------------------------------------------------
+// Storage services — shared by the authenticated dashboard API and the public
+// share-link API, so both paths behave identically.
+// ---------------------------------------------------------------------------
+
+export async function listBucketFiles(bucketId: string, options: ListOptions) {
+  const db = getDb();
+  const { page, limit, search, fileId } = options;
+  const offset = (page - 1) * limit;
+
+  const filters = ['bucket_id = ?'];
+  const params: any[] = [bucketId];
+
+  if (fileId) {
+    filters.push('id = ?');
+    params.push(fileId);
+  }
+  if (search) {
+    filters.push('original_name LIKE ?');
+    params.push(`%${search}%`);
+  }
+
+  const where = filters.join(' AND ');
+
+  const rows = await db.all(
+    `SELECT id, name, original_name, mime_type, size, created_at
+     FROM files WHERE ${where}
+     ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+    [...params, limit, offset]
+  );
+
+  const totalRow = await db.get(`SELECT COUNT(*) as count FROM files WHERE ${where}`, params);
+  const total = totalRow?.count || 0;
+
+  return {
+    files: rows.map(toFileDto),
+    pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+  };
+}
+
+export async function storeUploadedFile(
+  bucketId: string,
+  bucketName: string,
+  file: Express.Multer.File
+): Promise<FileDto & { url: string }> {
+  const db = getDb();
+  const fileId = path.basename(file.filename, '.dat');
+  // Sanitize the display name so it is safe inside a URL path.
+  const safeName = encodeURIComponent(file.originalname.replace(/\s+/g, '-'));
+
+  const storagePath = await getStorageProvider().uploadFile(bucketId, fileId, file.path, file.mimetype);
+
+  await db.run(
+    `INSERT INTO files (id, bucket_id, name, original_name, mime_type, size, physical_path)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [fileId, bucketId, safeName, file.originalname, file.mimetype, file.size, storagePath]
+  );
+
+  return {
+    id: fileId,
+    name: safeName,
+    originalName: file.originalname,
+    mimeType: file.mimetype,
+    size: file.size,
+    createdAt: new Date().toISOString(),
+    url: `/s/${bucketName}/${safeName}?id=${fileId}`
+  };
+}
+
+export async function removeBucketFile(bucketId: string, fileId: string): Promise<boolean> {
+  const db = getDb();
+  const fileRecord = await db.get('SELECT id FROM files WHERE id = ? AND bucket_id = ?', [fileId, bucketId]);
+
+  if (!fileRecord) return false;
+
+  await getStorageProvider().deleteFile(bucketId, fileRecord.id);
+  await db.run('DELETE FROM files WHERE id = ?', [fileId]);
+  return true;
+}
+
+/** Removes a temp upload that never made it into storage. */
+export function discardTempUpload(file?: Express.Multer.File) {
+  if (file && fs.existsSync(file.path)) {
+    fs.unlinkSync(file.path);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard / API-key endpoints
+// ---------------------------------------------------------------------------
+
 export async function listFiles(req: AuthenticatedRequest, res: Response) {
   const { bucketName } = req.params;
-  const page = parseInt(req.query.page as string) || 1;
-  const limit = parseInt(req.query.limit as string) || 50;
-  const search = (req.query.search as string) || '';
-  const offset = (page - 1) * limit;
 
   try {
     const db = getDb();
     const bucket = await db.get('SELECT id, is_public FROM buckets WHERE name = ?', [bucketName]);
-    
+
     if (!bucket) {
       return res.status(404).json({ error: 'Bucket not found.' });
     }
 
-    // Check privacy authorization
-    const isPublic = Boolean(bucket.is_public);
-    if (!isPublic && !req.user && !req.apiKeyName) {
+    if (!bucket.is_public && !req.user && !req.apiKeyName) {
       return res.status(403).json({ error: 'Forbidden: Access to private bucket is restricted.' });
     }
 
-    let filesQuery = 'SELECT id, name, original_name, mime_type, size, created_at FROM files WHERE bucket_id = ?';
-    const params: any[] = [bucket.id];
-
-    if (search) {
-      filesQuery += ' AND original_name LIKE ?';
-      params.push(`%${search}%`);
-    }
-
-    filesQuery += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
-    params.push(limit, offset);
-
-    const files = await db.all(filesQuery, params);
-
-    // Get total count for pagination
-    let countQuery = 'SELECT COUNT(*) as count FROM files WHERE bucket_id = ?';
-    const countParams: any[] = [bucket.id];
-    if (search) {
-      countQuery += ' AND original_name LIKE ?';
-      countParams.push(`%${search}%`);
-    }
-    const totalCount = await db.get(countQuery, countParams);
-
-    res.json({
-      files: files.map(f => ({
-        id: f.id,
-        name: f.name,
-        originalName: f.original_name,
-        mimeType: f.mime_type,
-        size: f.size,
-        createdAt: f.created_at
-      })),
-      pagination: {
-        page,
-        limit,
-        total: totalCount?.count || 0,
-        pages: Math.ceil((totalCount?.count || 0) / limit)
-      }
-    });
+    res.json(await listBucketFiles(bucket.id, {
+      page: parseInt(req.query.page as string) || 1,
+      limit: parseInt(req.query.limit as string) || 50,
+      search: (req.query.search as string) || ''
+    }));
   } catch (error) {
     console.error('List files error:', error);
     res.status(500).json({ error: 'Internal Server Error' });
@@ -113,114 +192,112 @@ export async function uploadFile(req: AuthenticatedRequest, res: Response) {
   try {
     const db = getDb();
     const bucket = await db.get('SELECT id FROM buckets WHERE name = ?', [bucketName]);
-    
+
     if (!bucket) {
-      // Cleanup uploaded file from disk if bucket doesn't exist
-      if (fs.existsSync(file.path)) {
-        fs.unlinkSync(file.path);
-      }
+      discardTempUpload(file);
       return res.status(404).json({ error: 'Bucket not found.' });
     }
 
-    const fileId = path.basename(file.filename, '.dat');
-    // Sanitize user name for URL safety
-    const safeName = encodeURIComponent(file.originalname.replace(/\s+/g, '-'));
-
-    // Upload via storage provider (local disk or MinIO)
-    const storagePath = await getStorageProvider().uploadFile(bucket.id, fileId, file.path, file.mimetype);
-
-    await db.run(
-      `INSERT INTO files (id, bucket_id, name, original_name, mime_type, size, physical_path)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [fileId, bucket.id, safeName, file.originalname, file.mimetype, file.size, storagePath]
-    );
-
-    res.status(201).json({
-      id: fileId,
-      name: safeName,
-      originalName: file.originalname,
-      mimeType: file.mimetype,
-      size: file.size,
-      createdAt: new Date().toISOString(),
-      url: `/s/${bucketName}/${safeName}?id=${fileId}`,
-      message: 'File uploaded successfully.'
-    });
+    const stored = await storeUploadedFile(bucket.id, bucketName, file);
+    res.status(201).json({ ...stored, message: 'File uploaded successfully.' });
   } catch (error) {
     console.error('Upload file error:', error);
-    if (file && fs.existsSync(file.path)) {
-      fs.unlinkSync(file.path);
-    }
+    discardTempUpload(file);
     res.status(500).json({ error: 'Internal Server Error' });
   }
+}
+
+export async function deleteFile(req: AuthenticatedRequest, res: Response) {
+  const { bucketName, fileId } = req.params;
+
+  try {
+    const db = getDb();
+    const bucket = await db.get('SELECT id FROM buckets WHERE name = ?', [bucketName]);
+
+    if (!bucket) {
+      return res.status(404).json({ error: 'Bucket not found.' });
+    }
+
+    const removed = await removeBucketFile(bucket.id, fileId);
+    if (!removed) {
+      return res.status(404).json({ error: 'File not found.' });
+    }
+
+    res.json({ message: 'File deleted successfully.' });
+  } catch (error) {
+    console.error('Delete file error:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Streaming endpoint (authorizes internally so media players can hit it directly)
+// ---------------------------------------------------------------------------
+
+async function isRequestAuthorized(req: Request, bucketId: string, fileId: string): Promise<boolean> {
+  const db = getDb();
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : (req.query.token as string);
+
+  if (token) {
+    try {
+      jwt.verify(token, JWT_SECRET);
+      return true;
+    } catch {
+      // Fall through to the other credential types.
+    }
+  }
+
+  const apiKey = (req.headers['x-api-key'] || req.query.api_key) as string | undefined;
+  if (apiKey) {
+    const hash = crypto.createHash('sha256').update(apiKey).digest('hex');
+    const keyRecord = await db.get('SELECT id FROM api_keys WHERE key_hash = ?', [hash]);
+    if (keyRecord) return true;
+  }
+
+  // Share links: valid only for their own bucket, and for their own file when
+  // the link was scoped to a single file.
+  const shareToken = req.query.share as string | undefined;
+  if (shareToken) {
+    const share = await resolveShareToken(shareToken);
+    if (share && share.bucketId === bucketId && (!share.fileId || share.fileId === fileId)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export async function downloadFile(req: Request, res: Response) {
   const { bucketName, filename } = req.params;
   const fileId = req.query.id as string;
+  const forceDownload = req.query.download === '1';
 
   try {
     const db = getDb();
     const bucket = await db.get('SELECT id, is_public FROM buckets WHERE name = ?', [bucketName]);
-    
+
     if (!bucket) {
       return res.status(404).json({ error: 'Bucket not found.' });
     }
 
-    // Retrieve file metadata from DB
-    let fileRecord;
-    if (fileId) {
-      fileRecord = await db.get(
-        'SELECT * FROM files WHERE id = ? AND bucket_id = ?',
-        [fileId, bucket.id]
-      );
-    } else {
-      fileRecord = await db.get(
-        'SELECT * FROM files WHERE name = ? AND bucket_id = ? ORDER BY created_at DESC LIMIT 1',
-        [filename, bucket.id]
-      );
-    }
+    const fileRecord = fileId
+      ? await db.get('SELECT * FROM files WHERE id = ? AND bucket_id = ?', [fileId, bucket.id])
+      : await db.get(
+          'SELECT * FROM files WHERE name = ? AND bucket_id = ? ORDER BY created_at DESC LIMIT 1',
+          [filename, bucket.id]
+        );
 
     if (!fileRecord) {
       return res.status(404).json({ error: 'File not found.' });
     }
 
-    // Check privacy rules.
-    const isPublic = Boolean(bucket.is_public);
-    if (!isPublic) {
-      // Check auth manually within download endpoint for media players compatibility
-      const authHeader = req.headers.authorization;
-      const queryToken = req.query.token as string;
-      const apiKey = (req.headers['x-api-key'] || req.query.api_key) as string;
-      
-      let authenticated = false;
-
-      // 1. JWT validation
-      const token = authHeader ? authHeader.split(' ')[1] : queryToken;
-      if (token) {
-        try {
-          jwt.verify(token, JWT_SECRET);
-          authenticated = true;
-        } catch (_) {}
-      }
-
-      // 2. API Key validation
-      if (!authenticated && apiKey) {
-        try {
-          const hash = crypto.createHash('sha256').update(apiKey).digest('hex');
-          const keyRecord = await db.get('SELECT * FROM api_keys WHERE key_hash = ?', [hash]);
-          if (keyRecord) {
-            authenticated = true;
-          }
-        } catch (_) {}
-      }
-
-      if (!authenticated) {
-        return res.status(403).json({ error: 'Forbidden: Access to private resource is restricted.' });
-      }
+    if (!bucket.is_public && !(await isRequestAuthorized(req, bucket.id, fileRecord.id))) {
+      return res.status(403).json({ error: 'Forbidden: Access to private resource is restricted.' });
     }
 
     const fileSize = fileRecord.size;
-    const mimeType = fileRecord.mime_type;
+    const disposition = forceDownload ? 'attachment' : 'inline';
 
     // Handle range headers for streaming audio/video (HTTP 206 Partial Content)
     const rangeHeader = req.headers.range;
@@ -232,9 +309,7 @@ export async function downloadFile(req: Request, res: Response) {
       const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
 
       if (start >= fileSize || end >= fileSize) {
-        res.status(416).set({
-          'Content-Range': `bytes */${fileSize}`
-        });
+        res.status(416).set({ 'Content-Range': `bytes */${fileSize}` });
         return;
       }
       range = { start, end };
@@ -242,23 +317,24 @@ export async function downloadFile(req: Request, res: Response) {
 
     try {
       const storageResult = await getStorageProvider().getFileStream(bucket.id, fileRecord.id, range);
-      
+
       if (range) {
         res.writeHead(206, {
           'Content-Range': `bytes ${range.start}-${range.end}/${fileSize}`,
           'Accept-Ranges': 'bytes',
           'Content-Length': storageResult.size,
-          'Content-Type': mimeType,
-          'Content-Disposition': `inline; filename="${fileRecord.original_name}"`
+          'Content-Type': fileRecord.mime_type,
+          'Content-Disposition': `${disposition}; filename="${fileRecord.original_name}"`
         });
       } else {
         res.writeHead(200, {
           'Content-Length': fileSize,
-          'Content-Type': mimeType,
-          'Content-Disposition': `inline; filename="${fileRecord.original_name}"`
+          'Accept-Ranges': 'bytes',
+          'Content-Type': fileRecord.mime_type,
+          'Content-Disposition': `${disposition}; filename="${fileRecord.original_name}"`
         });
       }
-      
+
       storageResult.stream.pipe(res);
     } catch (err) {
       console.error('File stream error:', err);
@@ -266,39 +342,6 @@ export async function downloadFile(req: Request, res: Response) {
     }
   } catch (error) {
     console.error('Download/stream file error:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-}
-
-export async function deleteFile(req: AuthenticatedRequest, res: Response) {
-  const { bucketName, fileId } = req.params;
-
-  try {
-    const db = getDb();
-    const bucket = await db.get('SELECT id FROM buckets WHERE name = ?', [bucketName]);
-    
-    if (!bucket) {
-      return res.status(404).json({ error: 'Bucket not found.' });
-    }
-
-    const fileRecord = await db.get(
-      'SELECT * FROM files WHERE id = ? AND bucket_id = ?',
-      [fileId, bucket.id]
-    );
-
-    if (!fileRecord) {
-      return res.status(404).json({ error: 'File not found.' });
-    }
-
-    // Delete physically via storage provider
-    await getStorageProvider().deleteFile(bucket.id, fileRecord.id);
-
-    // Delete from database
-    await db.run('DELETE FROM files WHERE id = ?', [fileId]);
-
-    res.json({ message: 'File deleted successfully.' });
-  } catch (error) {
-    console.error('Delete file error:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 }

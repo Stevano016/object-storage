@@ -1,4 +1,4 @@
-import type { Bucket, FileItem } from '../types';
+import type { FileItem } from '../types';
 
 export type FileKind = 'image' | 'video' | 'audio' | 'document' | 'other';
 
@@ -10,24 +10,37 @@ export function getFileKind(mimeType: string): FileKind {
   return 'other';
 }
 
+/** How an anonymous or logged-in caller proves it may read a private file. */
+export type FileCredential =
+  | { kind: 'token'; value: string }
+  | { kind: 'share'; value: string }
+  | null
+  | undefined;
+
 interface FileUrlOptions {
   apiUrl: string;
-  bucket: Bucket | undefined;
   bucketName: string;
   file: FileItem;
-  /** Appended for private buckets so <img>/<video> tags can authenticate. */
-  token?: string | null;
+  credential?: FileCredential;
+  /** Sends Content-Disposition: attachment so the browser saves instead of opens. */
+  download?: boolean;
 }
 
-/** Shareable URL. Private buckets need the token, public ones stay clean. */
-export function buildFileUrl({ apiUrl, bucket, bucketName, file, token }: FileUrlOptions): string {
-  const base = `${apiUrl}/s/${bucketName}/${file.name}?id=${file.id}`;
-  const needsToken = bucket ? !bucket.isPublic : false;
+export function buildFileUrl({ apiUrl, bucketName, file, credential, download }: FileUrlOptions): string {
+  const params = new URLSearchParams({ id: file.id });
 
-  return needsToken && token ? `${base}&token=${token}` : base;
+  if (credential?.kind === 'token') params.set('token', credential.value);
+  if (credential?.kind === 'share') params.set('share', credential.value);
+  if (download) params.set('download', '1');
+
+  return `${apiUrl}/s/${bucketName}/${file.name}?${params.toString()}`;
 }
 
-/** Same URL without credentials — what you hand to someone else. */
+/** The same URL stripped of credentials — what you hand to someone else. */
 export function buildPublicFileUrl(apiUrl: string, bucketName: string, file: FileItem): string {
-  return `${apiUrl}/s/${bucketName}/${file.name}?id=${file.id}`;
+  return buildFileUrl({ apiUrl, bucketName, file });
+}
+
+export function buildShareUrl(apiUrl: string, token: string): string {
+  return `${apiUrl}/share/${token}`;
 }

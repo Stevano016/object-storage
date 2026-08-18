@@ -161,6 +161,7 @@ Setiap akun memiliki salah satu dari dua peran. Pembatasan diterapkan di sisi se
 | Membuat, mengubah, menghapus bucket | ✅ | ❌ |
 | Membuat dan mencabut API Key | ✅ | ❌ |
 | Menambah, mengubah, menghapus pengguna | ✅ | ❌ |
+| Membuat dan mencabut tautan berbagi | ✅ | ❌ |
 | Mengganti password sendiri | ✅ | ✅ |
 
 Akun `admin` bawaan otomatis berperan **Super Admin**. Database lama (sebelum fitur ini) akan dimigrasikan otomatis saat server dijalankan: kolom `role` ditambahkan dan seluruh akun yang sudah ada dipromosikan menjadi Super Admin.
@@ -180,6 +181,65 @@ PUT    /api/users/:id        # { username?, password?, role? }
 DELETE /api/users/:id
 GET    /api/auth/me          # profil akun yang sedang masuk
 ```
+
+---
+
+## Tautan Berbagi (Share Link)
+
+Mirip Google Drive: sebuah tautan yang bisa dibuka **tanpa login sama sekali**. Token di dalam URL adalah satu-satunya kredensial, jadi siapa pun yang memegang tautan mendapat akses sesuai izinnya.
+
+Tersedia dua tingkat izin:
+
+| | Lihat & Unduh (`viewer`) | Unggah & Hapus (`editor`) |
+| --- | :---: | :---: |
+| Membuka halaman berbagi tanpa login | ✅ | ✅ |
+| Melihat pratinjau (foto, video, audio) | ✅ | ✅ |
+| Mengunduh berkas | ✅ | ✅ |
+| Mengunggah berkas baru | ❌ | ✅ |
+| Menghapus berkas | ❌ | ✅ |
+| Melihat dasbor, bucket lain, atau API Key | ❌ | ❌ |
+
+### Cakupan tautan
+
+- **Seluruh bucket** — dibuat dari tab **Tautan Berbagi**. Penerima melihat semua berkas di bucket itu, lengkap dengan pencarian dan halaman.
+- **Satu berkas** — dibuat dari tombol **Buat Tautan Berbagi** di jendela detail berkas. Tautan ini hanya bisa membuka dan mengunduh berkas tersebut; berkas lain dalam bucket yang sama tetap tertutup, dan mengunggah lewat tautan ini ditolak.
+
+### Membuat dan mencabut
+
+Hanya **Super Admin** yang boleh membuat tautan, di tab **Tautan Berbagi**. Setiap tautan bisa diberi catatan dan masa berlaku (1 hari, 7 hari, 30 hari, 1 tahun, atau tanpa batas). Izin tautan dapat diubah kapan saja dari kolom **Izin** pada tabel, dan tombol hapus mencabutnya secara permanen — begitu dicabut atau kedaluwarsa, tautan langsung mati untuk semua orang yang menyimpannya.
+
+Format URL yang dibagikan:
+
+```text
+http://<host>:5000/share/<token>
+```
+
+### Endpoint
+
+Manajemen (butuh JWT Super Admin):
+
+```http
+GET    /api/shares              # daftar seluruh tautan
+POST   /api/shares              # { bucketName, permission, fileId?, label?, expiresInDays? }
+PUT    /api/shares/:id          # { permission?, label? }
+DELETE /api/shares/:id          # cabut tautan
+```
+
+Akses publik (tanpa autentikasi apa pun):
+
+```http
+GET    /api/share/:token                  # info tautan (izin, bucket, cakupan, masa berlaku)
+GET    /api/share/:token/files            # daftar berkas (?page, ?limit, ?search)
+POST   /api/share/:token/files            # unggah — hanya izin editor
+DELETE /api/share/:token/files/:fileId    # hapus — hanya izin editor
+GET    /s/:bucket/:file?id=<id>&share=<token>            # streaming / pratinjau
+GET    /s/:bucket/:file?id=<id>&share=<token>&download=1 # paksa unduh (attachment)
+```
+
+Tautan yang tidak valid, sudah dicabut, atau kedaluwarsa selalu dijawab `404` yang sama, sehingga token tidak bisa ditebak dengan membedakan pesan galat.
+
+> [!WARNING]
+> Tautan **Unggah & Hapus** memberi orang tanpa akun kemampuan mengubah isi bucket. Gunakan masa berlaku, bagikan hanya ke pihak yang dipercaya, dan cabut setelah tidak diperlukan.
 
 ---
 

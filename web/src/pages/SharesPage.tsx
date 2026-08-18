@@ -1,0 +1,296 @@
+import { useEffect, useState } from 'react';
+import { Copy, ExternalLink, Eye, Link2, Pencil, Trash2 } from 'lucide-react';
+import { EmptyState } from '../components/ui/EmptyState';
+import { Spinner } from '../components/ui/Spinner';
+import { useAuth } from '../context/AuthContext';
+import { useClipboard } from '../hooks/useClipboard';
+import { useShares } from '../hooks/useShares';
+import { buildShareUrl } from '../lib/files';
+import { formatDate, formatDateTime } from '../lib/format';
+import type { Bucket, SharePermission, ShareLink } from '../types';
+
+const EXPIRY_OPTIONS = [
+  { value: '', label: 'Tidak pernah kedaluwarsa' },
+  { value: '1', label: '1 hari' },
+  { value: '7', label: '7 hari' },
+  { value: '30', label: '30 hari' },
+  { value: '365', label: '1 tahun' }
+];
+
+const PERMISSION_LABELS: Record<SharePermission, string> = {
+  viewer: 'Lihat & Unduh',
+  editor: 'Unggah & Hapus'
+};
+
+function PermissionBadge({ permission }: { permission: SharePermission }) {
+  const isEditor = permission === 'editor';
+  const Icon = isEditor ? Pencil : Eye;
+
+  return (
+    <span className={`badge ${isEditor ? 'badge-private' : 'badge-public'}`}>
+      <Icon style={{ width: 12, height: 12 }} />
+      {PERMISSION_LABELS[permission]}
+    </span>
+  );
+}
+
+interface SharesPageProps {
+  buckets: Bucket[];
+}
+
+export function SharesPage({ buckets }: SharesPageProps) {
+  const { apiUrl } = useAuth();
+  const { shares, loading, refresh, createShare, updateShare, revokeShare } = useShares();
+  const copy = useClipboard();
+
+  const [bucketName, setBucketName] = useState('');
+  const [permission, setPermission] = useState<SharePermission>('viewer');
+  const [label, setLabel] = useState('');
+  const [expiresInDays, setExpiresInDays] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [lastCreated, setLastCreated] = useState<ShareLink | null>(null);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!bucketName && buckets.length > 0) setBucketName(buckets[0].name);
+  }, [bucketName, buckets]);
+
+  const handleCreate = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setCreating(true);
+
+    const created = await createShare({
+      bucketName,
+      permission,
+      label: label.trim() || undefined,
+      expiresInDays: expiresInDays ? Number(expiresInDays) : undefined
+    });
+
+    setCreating(false);
+
+    if (created) {
+      setLastCreated(created);
+      setLabel('');
+      await refresh();
+    }
+  };
+
+  const handleRevoke = (share: ShareLink) => {
+    const target = share.label || share.bucketName;
+    if (window.confirm(`Cabut tautan '${target}'? Siapa pun yang menyimpannya langsung kehilangan akses.`)) {
+      void revokeShare(share.id);
+    }
+  };
+
+  return (
+    <div>
+      <div className="dashboard-panel" style={{ marginBottom: '1.5rem' }}>
+        <h3>Buat Tautan Berbagi</h3>
+        <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginBottom: '1.25rem' }}>
+          Siapa pun yang memegang tautan bisa membukanya tanpa login. Pilih izinnya dengan hati-hati:
+          tautan <strong>Unggah &amp; Hapus</strong> memberi orang asing kemampuan mengubah isi bucket.
+        </p>
+
+        <form onSubmit={handleCreate}>
+          <div className="overview-grid" style={{ gap: '1rem' }}>
+            <div className="form-group">
+              <label className="form-label" htmlFor="share-bucket">Bucket</label>
+              <select
+                className="form-input"
+                id="share-bucket"
+                value={bucketName}
+                onChange={event => setBucketName(event.target.value)}
+                style={{ cursor: 'pointer' }}
+                required
+              >
+                {buckets.length === 0 && <option value="">Belum ada bucket</option>}
+                {buckets.map(bucket => (
+                  <option key={bucket.id} value={bucket.name}>
+                    {bucket.name} ({bucket.isPublic ? 'Publik' : 'Privat'})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="share-permission">Izin</label>
+              <select
+                className="form-input"
+                id="share-permission"
+                value={permission}
+                onChange={event => setPermission(event.target.value as SharePermission)}
+                style={{ cursor: 'pointer' }}
+              >
+                <option value="viewer">Hanya lihat &amp; unduh</option>
+                <option value="editor">Bisa unggah &amp; hapus</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="share-label">Catatan (opsional)</label>
+              <input
+                className="form-input"
+                id="share-label"
+                type="text"
+                placeholder="Contoh: Untuk tim dokumentasi"
+                value={label}
+                onChange={event => setLabel(event.target.value)}
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="share-expiry">Masa berlaku</label>
+              <select
+                className="form-input"
+                id="share-expiry"
+                value={expiresInDays}
+                onChange={event => setExpiresInDays(event.target.value)}
+                style={{ cursor: 'pointer' }}
+              >
+                {EXPIRY_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <button
+            className="btn btn-primary"
+            type="submit"
+            disabled={creating || buckets.length === 0}
+            style={{ marginTop: '0.5rem' }}
+          >
+            {creating ? <Spinner size={18} /> : <Link2 style={{ width: 18, height: 18 }} />}
+            Buat Tautan
+          </button>
+        </form>
+
+        {lastCreated && (
+          <div style={{
+            marginTop: '1.5rem',
+            padding: '1rem',
+            border: '1px solid var(--success-border)',
+            backgroundColor: 'var(--success-bg)',
+            borderRadius: 'var(--radius-md)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--success)', fontWeight: 600 }}>
+              <Link2 style={{ width: 18, height: 18 }} />
+              <span>Tautan siap dibagikan</span>
+            </div>
+            <div className="secure-key-container">
+              <span className="secure-key-text">{buildShareUrl(apiUrl, lastCreated.token)}</span>
+              <button
+                className="btn btn-secondary btn-icon-only"
+                onClick={() => void copy(buildShareUrl(apiUrl, lastCreated.token))}
+              >
+                <Copy style={{ width: 16, height: 16 }} />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {loading ? (
+        <Spinner block />
+      ) : shares.length === 0 ? (
+        <EmptyState
+          icon={Link2}
+          title="Belum ada tautan berbagi"
+          description="Buat tautan di atas untuk memberi akses tanpa login ke sebuah bucket."
+        />
+      ) : (
+        <div className="table-container">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Tautan</th>
+                <th>Cakupan</th>
+                <th>Izin</th>
+                <th>Kedaluwarsa</th>
+                <th style={{ textAlign: 'right' }}>Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shares.map(share => {
+                const url = buildShareUrl(apiUrl, share.token);
+                const expired = share.expiresAt ? new Date(share.expiresAt).getTime() <= Date.now() : false;
+
+                return (
+                  <tr key={share.id}>
+                    <td>
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {share.label || share.bucketName}
+                      </div>
+                      <code style={{ fontSize: '0.75rem', wordBreak: 'break-all' }}>{url}</code>
+                    </td>
+                    <td>
+                      <div>{share.bucketName}</div>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        {share.fileName ? `Berkas: ${share.fileName}` : 'Seluruh bucket'}
+                      </span>
+                    </td>
+                    <td>
+                      <select
+                        className="form-input"
+                        value={share.permission}
+                        onChange={event => void updateShare(share.id, {
+                          permission: event.target.value as SharePermission
+                        })}
+                        style={{ cursor: 'pointer', padding: '0.35rem 0.5rem', fontSize: '0.8rem' }}
+                        title="Ubah izin tautan"
+                      >
+                        <option value="viewer">Lihat &amp; Unduh</option>
+                        <option value="editor">Unggah &amp; Hapus</option>
+                      </select>
+                      <div style={{ marginTop: '0.35rem' }}>
+                        <PermissionBadge permission={share.permission} />
+                      </div>
+                    </td>
+                    <td style={{ fontSize: '0.85rem', color: expired ? 'var(--danger)' : undefined }}>
+                      {share.expiresAt
+                        ? `${expired ? 'Kedaluwarsa ' : 'Sampai '}${formatDateTime(share.expiresAt)}`
+                        : 'Tidak pernah'}
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        Dibuat {formatDate(share.createdAt)}
+                      </div>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                        <button
+                          className="btn btn-secondary btn-icon-only"
+                          onClick={() => void copy(url)}
+                          title="Salin tautan"
+                        >
+                          <Copy style={{ width: 16, height: 16 }} />
+                        </button>
+                        <a
+                          className="btn btn-secondary btn-icon-only"
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Buka tautan"
+                        >
+                          <ExternalLink style={{ width: 16, height: 16 }} />
+                        </a>
+                        <button
+                          className="btn btn-danger btn-icon-only"
+                          onClick={() => handleRevoke(share)}
+                          title="Cabut tautan"
+                        >
+                          <Trash2 style={{ width: 16, height: 16 }} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}

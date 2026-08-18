@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import { resolveApiUrl } from '../lib/apiUrl';
 import type { AuthUser } from '../types';
 
 const TOKEN_STORAGE_KEY = 'gentan_token';
@@ -15,15 +16,6 @@ function readStoredUser(): AuthUser | null {
     localStorage.removeItem(USER_STORAGE_KEY);
     return null;
   }
-}
-
-/**
- * In production the API is served from the same origin as the dashboard.
- * During development Vite runs on 5173 while the backend stays on 5000.
- */
-function resolveApiUrl(): string {
-  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
-  return window.location.hostname === 'localhost' ? 'http://localhost:5000' : window.location.origin;
 }
 
 interface AuthContextValue {

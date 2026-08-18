@@ -7,6 +7,9 @@ import { v4 as uuidv4 } from 'uuid';
 
 export type UserRole = 'superadmin' | 'user';
 
+/** What an anonymous visitor holding a share link may do. */
+export type SharePermission = 'viewer' | 'editor';
+
 export const BCRYPT_ROUNDS = 10;
 
 let db: Database<sqlite3.Database, sqlite3.Statement>;
@@ -107,6 +110,19 @@ export async function initDb(): Promise<Database<sqlite3.Database, sqlite3.State
       FOREIGN KEY(bucket_id) REFERENCES buckets(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS shares (
+      id TEXT PRIMARY KEY,
+      token TEXT UNIQUE NOT NULL,
+      bucket_id TEXT NOT NULL,
+      file_id TEXT,
+      permission TEXT NOT NULL DEFAULT 'viewer',
+      label TEXT,
+      expires_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(bucket_id) REFERENCES buckets(id) ON DELETE CASCADE,
+      FOREIGN KEY(file_id) REFERENCES files(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS api_keys (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -119,6 +135,8 @@ export async function initDb(): Promise<Database<sqlite3.Database, sqlite3.State
   await db.exec(`
     CREATE INDEX IF NOT EXISTS idx_files_bucket ON files(bucket_id);
     CREATE INDEX IF NOT EXISTS idx_files_name ON files(name);
+    CREATE INDEX IF NOT EXISTS idx_shares_token ON shares(token);
+    CREATE INDEX IF NOT EXISTS idx_shares_bucket ON shares(bucket_id);
   `);
 
   await runMigrations(db);
