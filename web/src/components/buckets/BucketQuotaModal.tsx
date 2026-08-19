@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { Spinner } from '../ui/Spinner';
-import { useToast } from '../../context/ToastContext';
 import { bytesToDraft, draftToBytes, validateDraft } from '../../lib/quota';
 import type { QuotaDraft } from '../../lib/quota';
 import { QuotaField } from './QuotaField';
@@ -14,18 +13,16 @@ interface BucketQuotaModalProps {
 }
 
 export function BucketQuotaModal({ bucket, onClose, onSave }: BucketQuotaModalProps) {
-  const { showToast } = useToast();
   const [quota, setQuota] = useState<QuotaDraft>(() => bytesToDraft(bucket.quotaBytes));
   const [saving, setSaving] = useState(false);
+  const [quotaError, setQuotaError] = useState<string | null>(null);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    const quotaError = validateDraft(quota);
-    if (quotaError) {
-      showToast(quotaError, 'error');
-      return;
-    }
+    const problem = validateDraft(quota);
+    setQuotaError(problem);
+    if (problem) return;
 
     setSaving(true);
     const saved = await onSave(bucket, draftToBytes(quota));
@@ -48,7 +45,13 @@ export function BucketQuotaModal({ bucket, onClose, onSave }: BucketQuotaModalPr
       }
     >
       {/* Passing the live usage lets the hint show the remaining room as it is typed. */}
-      <QuotaField id="bucket-quota-edit" draft={quota} onChange={setQuota} usedBytes={bucket.totalSize} />
+      <QuotaField
+        id="bucket-quota-edit"
+        draft={quota}
+        onChange={draft => { setQuota(draft); setQuotaError(null); }}
+        usedBytes={bucket.totalSize}
+        error={quotaError}
+      />
 
       <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
         Kuota dihitung dari total ukuran berkas di bucket ini, bukan dari kapasitas disk.

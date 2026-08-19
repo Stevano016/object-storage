@@ -1,5 +1,6 @@
 import { HardDrive, LogOut, Shield, User, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useConfirm } from '../../context/ConfirmContext';
 import { getVisibleNavItems } from '../../lib/navigation';
 import { ROLE_LABELS } from '../ui/RoleBadge';
 import type { TabId } from '../../types';
@@ -14,8 +15,20 @@ interface SidebarProps {
 
 export function Sidebar({ activeTab, onTabChange, open, onClose }: SidebarProps) {
   const { user, isSuperAdmin, logout } = useAuth();
+  const confirm = useConfirm();
   const navItems = getVisibleNavItems(isSuperAdmin);
   const AvatarIcon = isSuperAdmin ? Shield : User;
+
+  // Asked because the button sits directly under the nav items and is easy to
+  // hit by accident, especially in the mobile drawer where it is a full-width row.
+  const handleLogout = async () => {
+    const confirmed = await confirm({
+      title: 'Keluar dari dasbor?',
+      message: 'Sesi Anda diakhiri di peramban ini dan Anda perlu memasukkan password lagi untuk masuk.',
+      confirmLabel: 'Keluar'
+    });
+    if (confirmed) logout();
+  };
 
   return (
     <aside className={`sidebar${open ? ' open' : ''}`}>
@@ -77,7 +90,7 @@ export function Sidebar({ activeTab, onTabChange, open, onClose }: SidebarProps)
             </span>
           </div>
         </div>
-        <button className="nav-btn" onClick={logout} style={{ color: 'var(--danger)' }}>
+        <button className="nav-btn" onClick={() => void handleLogout()} style={{ color: 'var(--danger)' }}>
           <LogOut style={{ width: 18, height: 18 }} />
           Keluar
         </button>

@@ -3,6 +3,9 @@ import { CheckCircle, Copy, Trash2 } from 'lucide-react';
 import { Spinner } from '../components/ui/Spinner';
 import { useApiKeys } from '../hooks/useApiKeys';
 import { useClipboard } from '../hooks/useClipboard';
+import { useConfirm } from '../context/ConfirmContext';
+import { FieldError } from '../components/ui/FieldError';
+import { requiredText } from '../lib/validation';
 import { formatDate } from '../lib/format';
 
 interface KeysPageProps {
@@ -12,13 +15,20 @@ interface KeysPageProps {
 export function KeysPage({ onKeysChanged }: KeysPageProps) {
   const { apiKeys, loading, createApiKey, deleteApiKey } = useApiKeys();
   const copy = useClipboard();
+  const confirm = useConfirm();
 
   const [newKeyName, setNewKeyName] = useState('');
+  const [nameError, setNameError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
 
   const handleCreate = async (event: React.FormEvent) => {
     event.preventDefault();
+
+    const problem = requiredText(newKeyName, 'Nama key');
+    setNameError(problem);
+    if (problem) return;
+
     setCreating(true);
     setGeneratedKey(null);
 
@@ -32,8 +42,15 @@ export function KeysPage({ onKeysChanged }: KeysPageProps) {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('Revoke API Key ini? Aplikasi luar tidak akan bisa mengakses storage lagi.')) return;
+  const handleDelete = async (id: string, name: string) => {
+    const confirmed = await confirm({
+      title: `Cabut API Key '${name}'?`,
+      message: 'Skrip atau aplikasi luar yang memakai key ini langsung kehilangan akses. '
+        + 'Key tidak bisa dipulihkan — Anda harus membuat yang baru.',
+      confirmLabel: 'Cabut Key',
+      danger: true
+    });
+    if (!confirmed) return;
     await deleteApiKey(id);
     onKeysChanged();
   };
@@ -46,18 +63,19 @@ export function KeysPage({ onKeysChanged }: KeysPageProps) {
           API Key memungkinkan skrip luar atau server lain mengunggah dan mengunduh berkas secara programmatic.
         </p>
 
-        <form onSubmit={handleCreate}>
+        <form onSubmit={handleCreate} noValidate>
           <div className="form-group">
             <label className="form-label" htmlFor="api-key-name">Nama Deskripsi Key</label>
             <input
-              className="form-input"
               id="api-key-name"
               type="text"
               placeholder="Contoh: Skrip Backup Otomatis, App Mobile"
+              className={`form-input${nameError ? ' has-error' : ''}`}
               value={newKeyName}
-              onChange={event => setNewKeyName(event.target.value)}
-              required
+              onChange={event => { setNewKeyName(event.target.value); setNameError(null); }}
+              aria-invalid={nameError ? true : undefined}
             />
+            <FieldError message={nameError} />
           </div>
           <button className="btn btn-primary" type="submit" disabled={creating} style={{ marginTop: '0.5rem' }}>
             {creating ? <Spinner size={18} /> : 'Buat API Key'}
@@ -125,7 +143,7 @@ export function KeysPage({ onKeysChanged }: KeysPageProps) {
                     <td data-label="Aksi" style={{ textAlign: 'right' }}>
                       <button
                         className="btn btn-danger btn-icon-only"
-                        onClick={() => void handleDelete(key.id)}
+                        onClick={() => void handleDelete(key.id, key.name)}
                         title="Revoke key"
                       >
                         <Trash2 style={{ width: 14, height: 14 }} />

@@ -1387,3 +1387,59 @@ p { color: var(--text-secondary); }
   outline-offset: -2px;
   color: var(--text-primary);
 }
+
+/* ==========================================================================
+   Confirmation dialog & inline field validation
+   ========================================================================== */
+
+.confirm-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.confirm-icon {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  color: var(--accent-primary);
+  margin-top: 0.1rem;
+}
+
+.confirm-icon.is-danger {
+  color: var(--danger);
+}
+
+/* Replaces the browser's validation bubble, which cannot be styled. */
+.field-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--danger);
+}
+
+.field-error-icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin-top: 0.1rem;
+}
+
+/* Applied to an input whose value was rejected, so the field itself is findable
+   without reading every message on a long form. */
+.form-input.has-error,
+.password-field.has-error .form-input {
+  border-color: var(--danger);
+}
+
+.form-input.has-error:focus,
+.password-field.has-error .form-input:focus {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px oklch(0.58 0.16 20 / 0.15);
+}

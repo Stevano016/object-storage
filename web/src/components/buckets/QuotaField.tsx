@@ -1,3 +1,4 @@
+import { FieldError } from '../ui/FieldError';
 import { formatBytes } from '../../lib/format';
 import { draftToBytes, QUOTA_UNIT_BYTES } from '../../lib/quota';
 import type { QuotaDraft, QuotaUnit } from '../../lib/quota';
@@ -10,13 +11,15 @@ interface QuotaFieldProps {
   onChange: (draft: QuotaDraft) => void;
   /** Shown under the field so the effect of an edit is visible before saving. */
   usedBytes?: number;
+  /** Validation message, which replaces the hint while it is present. */
+  error?: string | null;
 }
 
 /**
  * The quota editor, shared by the create dialog and the change-quota dialog so
  * the two can never disagree about what an empty field means.
  */
-export function QuotaField({ id, draft, onChange, usedBytes }: QuotaFieldProps) {
+export function QuotaField({ id, draft, onChange, usedBytes, error }: QuotaFieldProps) {
   const bytes = draftToBytes(draft);
 
   const hint = (() => {
@@ -38,7 +41,7 @@ export function QuotaField({ id, draft, onChange, usedBytes }: QuotaFieldProps) 
       <label className="form-label" htmlFor={id}>Kuota Penyimpanan</label>
       <div style={{ display: 'flex', gap: '0.5rem' }}>
         <input
-          className="form-input"
+          className={`form-input${error ? ' has-error' : ''}`}
           id={id}
           type="number"
           min="0"
@@ -59,9 +62,13 @@ export function QuotaField({ id, draft, onChange, usedBytes }: QuotaFieldProps) 
           {UNITS.map(unit => <option key={unit} value={unit}>{unit}</option>)}
         </select>
       </div>
-      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-        {hint}
-      </p>
+      {error
+        ? <FieldError message={error} />
+        : (
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+            {hint}
+          </p>
+        )}
     </div>
   );
 }

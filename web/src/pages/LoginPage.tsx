@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { HardDrive } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { FieldError } from '../components/ui/FieldError';
 import { PasswordInput } from '../components/ui/PasswordInput';
 import { Spinner } from '../components/ui/Spinner';
+import { requiredText } from '../lib/validation';
 import { Toaster } from '../components/ui/Toaster';
 import type { AuthUser } from '../types';
 
@@ -14,14 +16,20 @@ export function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{ username?: string | null; password?: string | null }>({});
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (!username || !password) {
-      showToast('Masukkan username dan password.', 'error');
-      return;
-    }
+    // Only presence is checked here. The strength rules belong on the forms that
+    // set a password — applying them at sign-in would lock out an older account
+    // whose password predates the current policy.
+    const found = {
+      username: requiredText(username, 'Username'),
+      password: requiredText(password, 'Password')
+    };
+    setErrors(found);
+    if (found.username || found.password) return;
 
     setLoading(true);
     try {
@@ -54,18 +62,20 @@ export function LoginPage() {
           <p>Self-Hosted Secure Object Storage Server</p>
         </div>
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} noValidate>
           <div className="form-group">
             <label className="form-label" htmlFor="login-username">Username</label>
             <input
-              className="form-input"
+              className={`form-input${errors.username ? ' has-error' : ''}`}
               id="login-username"
               type="text"
               placeholder="admin"
               value={username}
-              onChange={event => setUsername(event.target.value)}
+              onChange={event => { setUsername(event.target.value); setErrors(e => ({ ...e, username: null })); }}
+              aria-invalid={errors.username ? true : undefined}
               autoComplete="username"
             />
+            <FieldError message={errors.username} />
           </div>
           <div className="form-group">
             <label className="form-label" htmlFor="login-password">Password</label>
@@ -73,9 +83,11 @@ export function LoginPage() {
               id="login-password"
               placeholder="••••••••••••"
               value={password}
-              onChange={setPassword}
+              onChange={value => { setPassword(value); setErrors(e => ({ ...e, password: null })); }}
               autoComplete="current-password"
+              invalid={Boolean(errors.password)}
             />
+            <FieldError message={errors.password} />
           </div>
           <button
             className="btn btn-primary"

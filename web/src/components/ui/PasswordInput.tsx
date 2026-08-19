@@ -6,10 +6,10 @@ interface PasswordInputProps {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
-  required?: boolean;
-  minLength?: number;
   /** 'current-password' when signing in, 'new-password' when setting one. */
   autoComplete?: string;
+  /** Marks the field as rejected so the border matches the message below it. */
+  invalid?: boolean;
 }
 
 /**
@@ -25,15 +25,14 @@ export function PasswordInput({
   value,
   onChange,
   placeholder,
-  required,
-  minLength,
-  autoComplete
+  autoComplete,
+  invalid
 }: PasswordInputProps) {
   const [visible, setVisible] = useState(false);
   const Icon = visible ? EyeOff : Eye;
 
   return (
-    <div className="password-field">
+    <div className={`password-field${invalid ? ' has-error' : ''}`}>
       <input
         className="form-input"
         id={id}
@@ -41,9 +40,8 @@ export function PasswordInput({
         placeholder={placeholder}
         value={value}
         onChange={event => onChange(event.target.value)}
-        required={required}
-        minLength={minLength}
         autoComplete={autoComplete}
+        aria-invalid={invalid || undefined}
       />
       <button
         className="password-toggle"

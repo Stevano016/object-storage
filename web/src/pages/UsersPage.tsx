@@ -5,6 +5,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { RoleBadge } from '../components/ui/RoleBadge';
 import { Spinner } from '../components/ui/Spinner';
 import { useAuth } from '../context/AuthContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { useUsers } from '../hooks/useUsers';
 import type { UserPayload } from '../hooks/useUsers';
 import { formatDate } from '../lib/format';
@@ -22,6 +23,7 @@ interface UsersPageProps {
 export function UsersPage({ onUsersChanged }: UsersPageProps) {
   const { user: currentUser, refreshUser } = useAuth();
   const { users, loading, createUser, updateUser, deleteUser } = useUsers();
+  const confirm = useConfirm();
   const [form, setForm] = useState<FormState>(null);
 
   const handleSubmit = async (payload: UserPayload): Promise<boolean> => {
@@ -47,7 +49,15 @@ export function UsersPage({ onUsersChanged }: UsersPageProps) {
   };
 
   const handleDelete = async (target: ManagedUser) => {
-    if (!window.confirm(`Hapus pengguna '${target.username}'? Tindakan ini tidak bisa dibatalkan.`)) return;
+    const confirmed = await confirm({
+      title: `Hapus pengguna '${target.username}'?`,
+      message: target.role === 'superadmin'
+        ? 'Akun ini seorang Super Admin. Menghapusnya mencabut seluruh aksesnya dan tidak bisa dibatalkan.'
+        : 'Akun ini kehilangan akses ke dasbor. Berkas yang pernah diunggahnya tetap ada di bucket.',
+      confirmLabel: 'Hapus Pengguna',
+      danger: true
+    });
+    if (!confirmed) return;
     await deleteUser(target);
     onUsersChanged();
   };

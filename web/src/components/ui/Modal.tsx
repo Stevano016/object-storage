@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -21,6 +22,16 @@ export function Modal({
   large = false,
   closeOnOverlayClick = false
 }: ModalProps) {
+  // Escape closes any modal. Without it the only way out is the X, which is a
+  // poor deal for a dialog opened by accident.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
   const body = (
     <>
       <div className="modal-body">{children}</div>
@@ -39,7 +50,9 @@ export function Modal({
             <X style={{ width: 18, height: 18 }} />
           </button>
         </div>
-        {onSubmit ? <form onSubmit={onSubmit}>{body}</form> : body}
+        {/* noValidate: every form validates in its own handler and renders the
+            message inline, so the browser's unstyleable bubble never appears. */}
+        {onSubmit ? <form onSubmit={onSubmit} noValidate>{body}</form> : body}
       </div>
     </div>
   );

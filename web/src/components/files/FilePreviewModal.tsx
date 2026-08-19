@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Modal } from '../ui/Modal';
 import { FileTypeIcon } from '../ui/FileTypeIcon';
 import { useClipboard } from '../../hooks/useClipboard';
+import { useConfirm } from '../../context/ConfirmContext';
 import { getFileKind } from '../../lib/files';
 import { formatBytes, formatDateTime } from '../../lib/format';
 import type { FileItem } from '../../types';
@@ -73,9 +74,16 @@ export function FilePreviewModal({
   onClose
 }: FilePreviewModalProps) {
   const kind = getFileKind(file.mimeType);
+  const confirm = useConfirm();
 
-  const handleDelete = () => {
-    if (window.confirm('Hapus berkas ini secara permanen dari server?')) {
+  const handleDelete = async () => {
+    if (await confirm({
+      title: 'Hapus berkas ini?',
+      message: `'${file.originalName}' dihapus permanen dari server dan tidak bisa dikembalikan. `
+        + 'Tautan langsung yang sudah dibagikan ke berkas ini akan mati.',
+      confirmLabel: 'Hapus Berkas',
+      danger: true
+    })) {
       onDelete?.();
     }
   };
@@ -89,7 +97,7 @@ export function FilePreviewModal({
       footer={
         <>
           {onDelete && (
-            <button className="btn btn-danger" onClick={handleDelete}>
+            <button className="btn btn-danger" onClick={() => void handleDelete()}>
               <Trash2 style={{ width: 16, height: 16 }} />
               Hapus Berkas
             </button>

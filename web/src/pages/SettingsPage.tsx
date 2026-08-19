@@ -2,12 +2,11 @@ import { useState } from 'react';
 import { KeyRound } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { FieldError } from '../components/ui/FieldError';
 import { PasswordInput } from '../components/ui/PasswordInput';
 import { Spinner } from '../components/ui/Spinner';
+import * as validate from '../lib/validation';
 import { RoleBadge } from '../components/ui/RoleBadge';
-
-/** Kept in step with MIN_PASSWORD_LENGTH on the server. */
-const MIN_PASSWORD_LENGTH = 10;
 
 export function SettingsPage() {
   const { apiFetch, user, login } = useAuth();
@@ -17,14 +16,18 @@ export function SettingsPage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string | null>>({});
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (newPassword !== confirmPassword) {
-      showToast('Password baru dan konfirmasi tidak cocok.', 'error');
-      return;
-    }
+    const found = {
+      current: validate.requiredText(currentPassword, 'Password saat ini'),
+      next: validate.password(newPassword, user?.username),
+      confirm: validate.passwordConfirmation(confirmPassword, newPassword)
+    };
+    setErrors(found);
+    if (!validate.isClean(found)) return;
 
     setLoading(true);
     try {
@@ -44,6 +47,7 @@ export function SettingsPage() {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
+      setErrors({});
     } catch (error) {
       showToast((error as Error).message, 'error');
     } finally {
@@ -73,29 +77,30 @@ export function SettingsPage() {
           <h3>Ganti Password</h3>
         </div>
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} noValidate>
           <div className="form-group">
             <label className="form-label" htmlFor="curr-password">Password Saat Ini</label>
             <PasswordInput
               id="curr-password"
               placeholder="••••••••••••"
               value={currentPassword}
-              onChange={setCurrentPassword}
-              required
+              onChange={value => { setCurrentPassword(value); setErrors(e => ({ ...e, current: null })); }}
               autoComplete="current-password"
+              invalid={Boolean(errors.current)}
             />
+            <FieldError message={errors.current} />
           </div>
           <div className="form-group">
             <label className="form-label" htmlFor="new-password">Password Baru</label>
             <PasswordInput
               id="new-password"
-              placeholder={`Minimal ${MIN_PASSWORD_LENGTH} karakter`}
+              placeholder={`Minimal ${validate.MIN_PASSWORD_LENGTH} karakter`}
               value={newPassword}
-              onChange={setNewPassword}
-              required
-              minLength={MIN_PASSWORD_LENGTH}
+              onChange={value => { setNewPassword(value); setErrors(e => ({ ...e, next: null })); }}
               autoComplete="new-password"
+              invalid={Boolean(errors.next)}
             />
+            <FieldError message={errors.next} />
           </div>
           <div className="form-group">
             <label className="form-label" htmlFor="conf-password">Konfirmasi Password Baru</label>
@@ -103,11 +108,11 @@ export function SettingsPage() {
               id="conf-password"
               placeholder="Ulangi password baru"
               value={confirmPassword}
-              onChange={setConfirmPassword}
-              required
-              minLength={MIN_PASSWORD_LENGTH}
+              onChange={value => { setConfirmPassword(value); setErrors(e => ({ ...e, confirm: null })); }}
               autoComplete="new-password"
+              invalid={Boolean(errors.confirm)}
             />
+            <FieldError message={errors.confirm} />
           </div>
           <button className="btn btn-primary" type="submit" disabled={loading} style={{ marginTop: '0.5rem' }}>
             {loading ? <Spinner size={18} /> : 'Perbarui Password'}

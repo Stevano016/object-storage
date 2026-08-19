@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Copy, ExternalLink, Link2, Trash2 } from 'lucide-react';
 import { EmptyState } from '../components/ui/EmptyState';
+import { FieldError } from '../components/ui/FieldError';
 import { Spinner } from '../components/ui/Spinner';
 import { useAuth } from '../context/AuthContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { useClipboard } from '../hooks/useClipboard';
 import { useShares } from '../hooks/useShares';
 import { buildShareUrl } from '../lib/files';
@@ -23,6 +25,7 @@ interface SharesPageProps {
 
 export function SharesPage({ buckets }: SharesPageProps) {
   const { apiUrl } = useAuth();
+  const confirm = useConfirm();
   const { shares, loading, refresh, createShare, updateShare, revokeShare } = useShares();
   const copy = useClipboard();
 
@@ -32,6 +35,7 @@ export function SharesPage({ buckets }: SharesPageProps) {
   const [expiresInDays, setExpiresInDays] = useState('');
   const [creating, setCreating] = useState(false);
   const [lastCreated, setLastCreated] = useState<ShareLink | null>(null);
+  const [bucketError, setBucketError] = useState<string | null>(null);
 
   useEffect(() => {
     void refresh();
@@ -43,6 +47,15 @@ export function SharesPage({ buckets }: SharesPageProps) {
 
   const handleCreate = async (event: React.FormEvent) => {
     event.preventDefault();
+
+    // Reachable when the instance has no buckets yet: the select falls back to an
+    // empty value, and a share link with no bucket is meaningless.
+    if (!bucketName) {
+      setBucketError('Pilih bucket terlebih dahulu. Buat satu di tab Buckets bila belum ada.');
+      return;
+    }
+    setBucketError(null);
+
     setCreating(true);
 
     const created = await createShare({
@@ -61,11 +74,18 @@ export function SharesPage({ buckets }: SharesPageProps) {
     }
   };
 
-  const handleRevoke = (share: ShareLink) => {
+  const handleRevoke = async (share: ShareLink) => {
     const target = share.label || share.bucketName;
-    if (window.confirm(`Cabut tautan '${target}'? Siapa pun yang menyimpannya langsung kehilangan akses.`)) {
-      void revokeShare(share.id);
-    }
+    const confirmed = await confirm({
+      title: `Cabut tautan '${target}'?`,
+      message: share.permission === 'editor'
+        ? 'Tautan ini bisa mengunggah dan menghapus berkas. Mencabutnya menutup akses itu seketika, '
+          + 'tapi berkas yang sudah diunggah lewat tautan ini tetap ada di bucket.'
+        : 'Siapa pun yang sudah menyimpan tautan ini langsung kehilangan akses. Tautan tidak bisa dipulihkan.',
+      confirmLabel: 'Cabut Tautan',
+      danger: true
+    });
+    if (confirmed) void revokeShare(share.id);
   };
 
   return (
@@ -77,17 +97,17 @@ export function SharesPage({ buckets }: SharesPageProps) {
           tautan <strong>Unggah &amp; Hapus</strong> memberi orang asing kemampuan mengubah isi bucket.
         </p>
 
-        <form onSubmit={handleCreate}>
+        <form onSubmit={handleCreate} noValidate>
           <div className="form-grid">
             <div className="form-group">
               <label className="form-label" htmlFor="share-bucket">Bucket</label>
               <select
-                className="form-input"
+                className={`form-input${bucketError ? ' has-error' : ''}`}
                 id="share-bucket"
                 value={bucketName}
-                onChange={event => setBucketName(event.target.value)}
+                onChange={event => { setBucketName(event.target.value); setBucketError(null); }}
                 style={{ cursor: 'pointer' }}
-                required
+                aria-invalid={bucketError ? true : undefined}
               >
                 {buckets.length === 0 && <option value="">Belum ada bucket</option>}
                 {buckets.map(bucket => (
@@ -96,6 +116,7 @@ export function SharesPage({ buckets }: SharesPageProps) {
                   </option>
                 ))}
               </select>
+              <FieldError message={bucketError} />
             </div>
 
             <div className="form-group">
@@ -261,7 +282,7 @@ export function SharesPage({ buckets }: SharesPageProps) {
                         </a>
                         <button
                           className="btn btn-danger btn-icon-only"
-                          onClick={() => handleRevoke(share)}
+                          onClick={() => void handleRevoke(share)}
                           title="Cabut tautan"
                         >
                           <Trash2 style={{ width: 16, height: 16 }} />

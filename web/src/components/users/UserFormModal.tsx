@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { FieldError } from '../ui/FieldError';
 import { Modal } from '../ui/Modal';
 import { PasswordInput } from '../ui/PasswordInput';
 import { Spinner } from '../ui/Spinner';
+import * as validate from '../../lib/validation';
 import type { UserPayload } from '../../hooks/useUsers';
 import type { ManagedUser, UserRole } from '../../types';
 
@@ -26,11 +28,21 @@ export function UserFormModal({ user, isSelf, onSubmit, onClose }: UserFormModal
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>(user?.role ?? 'user');
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<{ username?: string | null; password?: string | null }>({});
 
   const selectedRoleHint = ROLE_OPTIONS.find(option => option.value === role)?.hint;
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+
+    // When editing, an empty password means "leave it alone" — so it is only
+    // checked when something was actually typed.
+    const found = {
+      username: validate.username(username),
+      password: isEditing && !password ? null : validate.password(password, username)
+    };
+    setErrors(found);
+    if (!validate.isClean(found)) return;
 
     const payload: UserPayload = { username: username.trim() };
     if (password) payload.password = password;
@@ -60,18 +72,22 @@ export function UserFormModal({ user, isSelf, onSubmit, onClose }: UserFormModal
       <div className="form-group">
         <label className="form-label" htmlFor="user-username">Username</label>
         <input
-          className="form-input"
+          className={`form-input${errors.username ? ' has-error' : ''}`}
           id="user-username"
           type="text"
           placeholder="operator-gudang"
           value={username}
-          onChange={event => setUsername(event.target.value)}
-          required
+          onChange={event => { setUsername(event.target.value); setErrors(e => ({ ...e, username: null })); }}
+          aria-invalid={errors.username ? true : undefined}
           autoComplete="off"
         />
-        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-          3-32 karakter: huruf, angka, titik, garis bawah, atau tanda hubung.
-        </p>
+        {errors.username
+          ? <FieldError message={errors.username} />
+          : (
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+              3-32 karakter: huruf, angka, titik, garis bawah, atau tanda hubung.
+            </p>
+          )}
       </div>
 
       <div className="form-group">
@@ -80,13 +96,13 @@ export function UserFormModal({ user, isSelf, onSubmit, onClose }: UserFormModal
         </label>
         <PasswordInput
           id="user-password"
-          placeholder={isEditing ? 'Kosongkan bila tidak ingin mengubah' : 'Minimal 10 karakter'}
+          placeholder={isEditing ? 'Kosongkan bila tidak ingin mengubah' : `Minimal ${validate.MIN_PASSWORD_LENGTH} karakter`}
           value={password}
-          onChange={setPassword}
-          required={!isEditing}
-          minLength={10}
+          onChange={value => { setPassword(value); setErrors(e => ({ ...e, password: null })); }}
           autoComplete="new-password"
+          invalid={Boolean(errors.password)}
         />
+        <FieldError message={errors.password} />
       </div>
 
       <div className="form-group">

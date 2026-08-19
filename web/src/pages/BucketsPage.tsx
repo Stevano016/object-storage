@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Eye, Folder, Gauge, Globe, Lock, Plus, Trash2 } from 'lucide-react';
 import { BucketQuotaModal } from '../components/buckets/BucketQuotaModal';
+import { useConfirm } from '../context/ConfirmContext';
 import { CreateBucketModal } from '../components/buckets/CreateBucketModal';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
@@ -56,14 +57,20 @@ export function BucketsPage({
   onSetQuota,
   onOpenBucket
 }: BucketsPageProps) {
+  const confirm = useConfirm();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [quotaBucket, setQuotaBucket] = useState<Bucket | null>(null);
 
-  const handleDelete = (name: string) => {
-    const confirmed = window.confirm(
-      `Hapus bucket '${name}' beserta seluruh isinya? Tindakan ini tidak bisa dibatalkan.`
-    );
-    if (confirmed) void onDelete(name);
+  const handleDelete = async (bucket: Bucket) => {
+    const confirmed = await confirm({
+      title: `Hapus bucket '${bucket.name}'?`,
+      message: bucket.fileCount > 0
+        ? `Bucket ini berisi ${bucket.fileCount} berkas (${formatBytes(bucket.totalSize)}). Semuanya ikut terhapus dari server dan tidak bisa dikembalikan.`
+        : 'Bucket ini masih kosong. Menghapusnya tidak menghilangkan berkas apa pun.',
+      confirmLabel: 'Hapus Bucket',
+      danger: true
+    });
+    if (confirmed) void onDelete(bucket.name);
   };
 
   return (
@@ -140,7 +147,7 @@ export function BucketsPage({
                       </button>
                       <button
                         className="btn btn-danger btn-icon-only"
-                        onClick={() => handleDelete(bucket.name)}
+                        onClick={() => void handleDelete(bucket)}
                         title="Hapus bucket"
                       >
                         <Trash2 style={{ width: 16, height: 16 }} />
