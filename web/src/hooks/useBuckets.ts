@@ -24,12 +24,16 @@ export function useBuckets() {
     void refresh();
   }, [refresh]);
 
-  const createBucket = useCallback(async (name: string, isPublic: boolean): Promise<boolean> => {
+  const createBucket = useCallback(async (
+    name: string,
+    isPublic: boolean,
+    quotaBytes: number | null
+  ): Promise<boolean> => {
     try {
       await apiFetch('/api/buckets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, isPublic })
+        body: JSON.stringify({ name, isPublic, quotaBytes })
       });
       showToast(`Bucket '${name}' berhasil dibuat.`);
       await refresh();
@@ -66,5 +70,38 @@ export function useBuckets() {
     }
   }, [apiFetch, showToast, refresh]);
 
-  return { buckets, loading, refresh, createBucket, deleteBucket, setBucketVisibility };
+  const setBucketQuota = useCallback(async (
+    bucket: Bucket,
+    quotaBytes: number | null
+  ): Promise<boolean> => {
+    try {
+      // The response carries the current usage so an already-exceeded ceiling is
+      // reported now, instead of surfacing later as a failed upload.
+      const result = await apiFetch<{ usedBytes: number }>(`/api/buckets/${bucket.name}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quotaBytes })
+      });
+
+      if (quotaBytes === null) {
+        showToast(`Kuota bucket '${bucket.name}' dilepas (tanpa batas).`);
+      } else if (result.usedBytes > quotaBytes) {
+        showToast(
+          `Kuota disimpan, tapi isi bucket '${bucket.name}' sudah melebihi batas itu. `
+          + 'Unggahan baru akan ditolak sampai ada berkas yang dihapus.',
+          'info'
+        );
+      } else {
+        showToast(`Kuota bucket '${bucket.name}' diperbarui.`);
+      }
+
+      await refresh();
+      return true;
+    } catch (error) {
+      showToast((error as Error).message, 'error');
+      return false;
+    }
+  }, [apiFetch, showToast, refresh]);
+
+  return { buckets, loading, refresh, createBucket, deleteBucket, setBucketVisibility, setBucketQuota };
 }

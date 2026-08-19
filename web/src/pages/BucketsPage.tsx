@@ -1,18 +1,50 @@
 import { useState } from 'react';
-import { Eye, Folder, Globe, Lock, Plus, Trash2 } from 'lucide-react';
+import { Eye, Folder, Gauge, Globe, Lock, Plus, Trash2 } from 'lucide-react';
+import { BucketQuotaModal } from '../components/buckets/BucketQuotaModal';
 import { CreateBucketModal } from '../components/buckets/CreateBucketModal';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
-import { formatBytes, formatDate } from '../lib/format';
+import { formatBytes, formatDate, formatPercent } from '../lib/format';
 import type { Bucket } from '../types';
 
 interface BucketsPageProps {
   buckets: Bucket[];
   loading: boolean;
-  onCreate: (name: string, isPublic: boolean) => Promise<boolean>;
+  onCreate: (name: string, isPublic: boolean, quotaBytes: number | null) => Promise<boolean>;
   onDelete: (name: string) => Promise<boolean>;
   onToggleVisibility: (bucket: Bucket, isPublic: boolean) => Promise<void>;
+  onSetQuota: (bucket: Bucket, quotaBytes: number | null) => Promise<boolean>;
   onOpenBucket: (name: string) => void;
+}
+
+/** Usage cell: a plain byte total when unlimited, a meter when a quota is set. */
+function QuotaCell({ bucket }: { bucket: Bucket }) {
+  if (!bucket.quotaBytes) {
+    return (
+      <>
+        {formatBytes(bucket.totalSize)}
+        <span className="quota-caption">Tanpa batas</span>
+      </>
+    );
+  }
+
+  const percent = formatPercent(bucket.totalSize, bucket.quotaBytes);
+  // 90% is early enough to act on, 100% means the next upload is already refused.
+  const state = percent >= 100 ? 'is-full' : percent >= 90 ? 'is-warning' : '';
+
+  return (
+    <>
+      {formatBytes(bucket.totalSize)} / {formatBytes(bucket.quotaBytes)}
+      <div className="quota-bar">
+        <div className={`quota-bar-fill ${state}`} style={{ width: `${percent}%` }} />
+      </div>
+      <span className="quota-caption">
+        {percent >= 100
+          ? 'Kuota penuh — unggahan ditolak'
+          : `${Math.round(percent)}% terpakai`}
+      </span>
+    </>
+  );
 }
 
 export function BucketsPage({
@@ -21,9 +53,11 @@ export function BucketsPage({
   onCreate,
   onDelete,
   onToggleVisibility,
+  onSetQuota,
   onOpenBucket
 }: BucketsPageProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [quotaBucket, setQuotaBucket] = useState<Bucket | null>(null);
 
   const handleDelete = (name: string) => {
     const confirmed = window.confirm(
@@ -63,7 +97,7 @@ export function BucketsPage({
                 <th>Nama Bucket</th>
                 <th>Status Akses</th>
                 <th>Jumlah File</th>
-                <th>Total Ukuran</th>
+                <th>Ukuran / Kuota</th>
                 <th>Tanggal Dibuat</th>
                 <th style={{ textAlign: 'right' }}>Aksi</th>
               </tr>
@@ -86,7 +120,7 @@ export function BucketsPage({
                     </button>
                   </td>
                   <td data-label="Berkas">{bucket.fileCount} berkas</td>
-                  <td data-label="Ukuran">{formatBytes(bucket.totalSize)}</td>
+                  <td data-label="Ukuran"><QuotaCell bucket={bucket} /></td>
                   <td data-label="Dibuat">{formatDate(bucket.createdAt)}</td>
                   <td data-label="Aksi" style={{ textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
@@ -96,6 +130,13 @@ export function BucketsPage({
                         title="Buka berkas di bucket ini"
                       >
                         <Eye style={{ width: 16, height: 16 }} />
+                      </button>
+                      <button
+                        className="btn btn-secondary btn-icon-only"
+                        onClick={() => setQuotaBucket(bucket)}
+                        title="Atur kuota penyimpanan"
+                      >
+                        <Gauge style={{ width: 16, height: 16 }} />
                       </button>
                       <button
                         className="btn btn-danger btn-icon-only"
@@ -115,6 +156,14 @@ export function BucketsPage({
 
       {showCreateModal && (
         <CreateBucketModal onClose={() => setShowCreateModal(false)} onCreate={onCreate} />
+      )}
+
+      {quotaBucket && (
+        <BucketQuotaModal
+          bucket={quotaBucket}
+          onClose={() => setQuotaBucket(null)}
+          onSave={onSetQuota}
+        />
       )}
     </div>
   );

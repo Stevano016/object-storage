@@ -1,4 +1,4 @@
-import { File, Folder, HardDrive, Key, Users } from 'lucide-react';
+import { File, Folder, HardDrive, Key, ShieldAlert, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { formatBytes, formatPercent } from '../lib/format';
@@ -71,11 +71,40 @@ function DiskPanel({ stats }: { stats: Stats }) {
   );
 }
 
+/**
+ * The default password is printed in the repository's README, so an account that
+ * still uses it is public knowledge the moment the dashboard is reachable from
+ * the Internet. Shown to everyone, not just superadmins, because a regular user
+ * whose own account is affected has to be the one to fix it.
+ */
+function DefaultPasswordWarning({ accounts }: { accounts: string[] }) {
+  return (
+    <div className="alert-banner alert-banner-danger" role="alert">
+      <ShieldAlert className="alert-banner-icon" />
+      <div>
+        <div className="alert-banner-title">
+          {accounts.length > 1
+            ? `${accounts.length} akun masih memakai password bawaan`
+            : 'Akun masih memakai password bawaan'}
+        </div>
+        Akun <strong>{accounts.join(', ')}</strong> masih bisa dimasuki dengan password
+        yang tertulis di README proyek ini. Siapa pun yang menemukan alamat dasbor ini
+        bisa masuk sebagai admin. Ganti sekarang di tab <strong>Pengaturan</strong>.
+      </div>
+    </div>
+  );
+}
+
 export function OverviewPage({ stats }: { stats: Stats }) {
   const { apiUrl, isSuperAdmin } = useAuth();
+  const defaultPasswordAccounts = stats.accountsUsingDefaultPassword ?? [];
 
   return (
     <div>
+      {defaultPasswordAccounts.length > 0 && (
+        <DefaultPasswordWarning accounts={defaultPasswordAccounts} />
+      )}
+
       <div className="stats-grid">
         <StatCard icon={Folder} value={stats.buckets} label="Total Buckets" />
         <StatCard icon={File} value={stats.files} label="Total Files" />

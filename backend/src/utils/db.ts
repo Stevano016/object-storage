@@ -32,6 +32,7 @@ const SQLITE_SCHEMA = `
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'user',
+    password_changed_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -39,6 +40,7 @@ const SQLITE_SCHEMA = `
     id TEXT PRIMARY KEY,
     name TEXT UNIQUE NOT NULL,
     is_public INTEGER DEFAULT 0,
+    quota_bytes INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -88,6 +90,7 @@ const MYSQL_SCHEMA = `
     username VARCHAR(64) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     role VARCHAR(20) NOT NULL DEFAULT 'user',
+    password_changed_at DATETIME NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -95,6 +98,7 @@ const MYSQL_SCHEMA = `
     id VARCHAR(36) NOT NULL PRIMARY KEY,
     name VARCHAR(63) NOT NULL UNIQUE,
     is_public TINYINT(1) NOT NULL DEFAULT 0,
+    quota_bytes BIGINT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -151,6 +155,22 @@ async function runMigrations(database: SqlDatabase) {
     // Every pre-existing account was an unrestricted admin, so keep it that way.
     await database.run(`UPDATE users SET role = 'superadmin'`);
     console.log('MIGRATION: users.role added; existing accounts promoted to superadmin.');
+  }
+
+  // v3: per-bucket storage ceiling. NULL means "no limit", which is what every
+  // bucket created before this column existed was implicitly using.
+  if (!(await database.hasColumn('buckets', 'quota_bytes'))) {
+    const columnType = database.dialect === 'mysql' ? 'BIGINT NULL' : 'INTEGER';
+    await database.exec(`ALTER TABLE buckets ADD COLUMN quota_bytes ${columnType}`);
+    console.log('MIGRATION: buckets.quota_bytes added; existing buckets stay unlimited.');
+  }
+
+  // v4: changing a password now invalidates that account's existing sessions.
+  // Left NULL for current accounts so nobody is logged out by the upgrade itself.
+  if (!(await database.hasColumn('users', 'password_changed_at'))) {
+    const columnType = database.dialect === 'mysql' ? 'DATETIME NULL' : 'DATETIME';
+    await database.exec(`ALTER TABLE users ADD COLUMN password_changed_at ${columnType}`);
+    console.log('MIGRATION: users.password_changed_at added.');
   }
 
   // Never leave the instance without a superadmin (e.g. after a botched manual edit).

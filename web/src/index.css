@@ -1276,3 +1276,72 @@ p { color: var(--text-secondary); }
     padding: 0.85rem 1rem;
   }
 }
+
+/* ==========================================================================
+   Quota meters & alert banners
+   ========================================================================== */
+
+/* A tighter progress bar than the upload one, sized to sit inside a table row. */
+.quota-bar {
+  width: 100%;
+  min-width: 90px;
+  max-width: 180px;
+  height: 5px;
+  background-color: var(--bg-tertiary);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 0.35rem;
+}
+
+.quota-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background-color: var(--success);
+  transition: width 0.2s ease;
+}
+
+/* Colour carries the same message as the number, for a faster read down a column. */
+.quota-bar-fill.is-warning {
+  background-color: var(--warning);
+}
+
+.quota-bar-fill.is-full {
+  background-color: var(--danger);
+}
+
+.quota-caption {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+}
+
+.alert-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem 1.15rem;
+  border-radius: var(--radius-md);
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.alert-banner-danger {
+  background-color: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  color: var(--text-primary);
+}
+
+.alert-banner-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  color: var(--danger);
+}
+
+.alert-banner-title {
+  font-weight: 600;
+  margin-bottom: 0.2rem;
+  color: var(--danger);
+}

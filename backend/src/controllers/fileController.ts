@@ -11,6 +11,8 @@ import path from 'path';
 
 import { getStorageProvider } from '../utils/storageProvider.js';
 import { MAX_UPLOAD_BYTES, JWT_SECRET } from '../utils/config.js';
+import { assertBucketQuota, QuotaExceededError } from '../utils/quota.js';
+import { contentDisposition, isInlineSafeMimeType, OBJECT_CSP } from '../utils/security.js';
 
 // Define directories
 const dataDir = path.resolve('data');
@@ -110,6 +112,12 @@ export async function storeUploadedFile(
   file: Express.Multer.File
 ): Promise<FileDto & { url: string }> {
   const db = getDb();
+
+  // Checked here rather than in each route so the dashboard, the API-key clients
+  // and the public share drop boxes are all held to the same ceiling. Multer has
+  // already spooled the body to disk; callers discard it when this throws.
+  await assertBucketQuota(bucketId, file.size);
+
   const fileId = path.basename(file.filename, '.dat');
   // Sanitize the display name so it is safe inside a URL path.
   const safeName = encodeURIComponent(file.originalname.replace(/\s+/g, '-'));
@@ -201,8 +209,13 @@ export async function uploadFile(req: AuthenticatedRequest, res: Response) {
     const stored = await storeUploadedFile(bucket.id, bucketName, file);
     res.status(201).json({ ...stored, message: 'File uploaded successfully.' });
   } catch (error) {
-    console.error('Upload file error:', error);
     discardTempUpload(file);
+
+    if (error instanceof QuotaExceededError) {
+      return res.status(413).json({ error: error.detail });
+    }
+
+    console.error('Upload file error:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 }
@@ -297,7 +310,19 @@ export async function downloadFile(req: Request, res: Response) {
     }
 
     const fileSize = fileRecord.size;
-    const disposition = forceDownload ? 'attachment' : 'inline';
+
+    // The uploader picked this MIME type and these bytes are served from the
+    // dashboard's own origin, so anything that a browser could execute — HTML,
+    // SVG, XML — is handed over as an opaque download instead of being rendered.
+    // Rendering it inline would let an uploaded page read the session token out
+    // of localStorage.
+    const inlineSafe = isInlineSafeMimeType(fileRecord.mime_type);
+    const disposition = forceDownload || !inlineSafe ? 'attachment' : 'inline';
+    const contentType = inlineSafe ? fileRecord.mime_type : 'application/octet-stream';
+
+    if (!inlineSafe) {
+      res.setHeader('Content-Security-Policy', OBJECT_CSP);
+    }
 
     // Handle range headers for streaming audio/video (HTTP 206 Partial Content)
     const rangeHeader = req.headers.range;
@@ -323,15 +348,17 @@ export async function downloadFile(req: Request, res: Response) {
           'Content-Range': `bytes ${range.start}-${range.end}/${fileSize}`,
           'Accept-Ranges': 'bytes',
           'Content-Length': storageResult.size,
-          'Content-Type': fileRecord.mime_type,
-          'Content-Disposition': `${disposition}; filename="${fileRecord.original_name}"`
+          'Content-Type': contentType,
+          'X-Content-Type-Options': 'nosniff',
+          'Content-Disposition': contentDisposition(disposition, fileRecord.original_name)
         });
       } else {
         res.writeHead(200, {
           'Content-Length': fileSize,
           'Accept-Ranges': 'bytes',
-          'Content-Type': fileRecord.mime_type,
-          'Content-Disposition': `${disposition}; filename="${fileRecord.original_name}"`
+          'Content-Type': contentType,
+          'X-Content-Type-Options': 'nosniff',
+          'Content-Disposition': contentDisposition(disposition, fileRecord.original_name)
         });
       }
 

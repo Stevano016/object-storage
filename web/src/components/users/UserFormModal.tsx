@@ -81,11 +81,11 @@ export function UserFormModal({ user, isSelf, onSubmit, onClose }: UserFormModal
           className="form-input"
           id="user-password"
           type="password"
-          placeholder={isEditing ? 'Kosongkan bila tidak ingin mengubah' : 'Minimal 6 karakter'}
+          placeholder={isEditing ? 'Kosongkan bila tidak ingin mengubah' : 'Minimal 10 karakter'}
           value={password}
           onChange={event => setPassword(event.target.value)}
           required={!isEditing}
-          minLength={6}
+          minLength={10}
           autoComplete="new-password"
         />
       </div>

@@ -30,7 +30,8 @@ export function Dashboard() {
     refresh: refreshBuckets,
     createBucket,
     deleteBucket,
-    setBucketVisibility
+    setBucketVisibility,
+    setBucketQuota
   } = useBuckets();
 
   const [activeTab, setActiveTab] = useState<TabId>('overview');
@@ -77,8 +78,8 @@ export function Dashboard() {
     return deleted;
   };
 
-  const handleCreateBucket = async (name: string, isPublic: boolean) => {
-    const created = await createBucket(name, isPublic);
+  const handleCreateBucket = async (name: string, isPublic: boolean, quotaBytes: number | null) => {
+    const created = await createBucket(name, isPublic, quotaBytes);
     if (created) await refreshStats();
     return created;
   };
@@ -133,6 +134,7 @@ export function Dashboard() {
               onCreate={handleCreateBucket}
               onDelete={handleDeleteBucket}
               onToggleVisibility={setBucketVisibility}
+              onSetQuota={setBucketQuota}
               onOpenBucket={handleOpenBucket}
             />
           )}

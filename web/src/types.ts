@@ -17,6 +17,8 @@ export interface Bucket {
   createdAt: string;
   fileCount: number;
   totalSize: number;
+  /** Storage ceiling in bytes, or null when the bucket is unlimited. */
+  quotaBytes: number | null;
 }
 
 export interface FileItem {
@@ -50,6 +52,8 @@ export interface Stats {
   disk: DiskUsage | null;
   diskLabel: string;
   storageProvider: string;
+  /** Accounts still reachable with the password published in the README. */
+  accountsUsingDefaultPassword: string[];
 }
 
 export interface Pagination {

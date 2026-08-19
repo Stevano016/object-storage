@@ -15,12 +15,17 @@ export interface AuthenticatedRequest extends Request {
   apiKeyName?: string;
 }
 
+/**
+ * API routes take the session token from the Authorization header only.
+ *
+ * A token in the query string ends up in the Apache access log, in Cloudflare's
+ * request log and in any Referer the page sends onward. The streaming endpoint
+ * under /s/ still accepts ?token= because <video> and <img> cannot send headers,
+ * and it authorizes that separately.
+ */
 function extractToken(req: Request): string | undefined {
   const authHeader = req.headers.authorization;
-  if (authHeader?.startsWith('Bearer ')) {
-    return authHeader.slice(7);
-  }
-  return typeof req.query.token === 'string' ? req.query.token : undefined;
+  return authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
 }
 
 function extractApiKey(req: Request): string | undefined {
@@ -35,17 +40,30 @@ function extractApiKey(req: Request): string | undefined {
  * for the 7-day token to expire.
  */
 async function resolveJwtUser(token: string): Promise<AuthenticatedUser | null> {
-  let payload: { id?: string };
+  let payload: { id?: string; iat?: number };
   try {
-    payload = jwt.verify(token, JWT_SECRET) as { id?: string };
+    payload = jwt.verify(token, JWT_SECRET) as { id?: string; iat?: number };
   } catch {
     return null;
   }
 
   if (!payload.id) return null;
 
-  const row = await getDb().get('SELECT id, username, role FROM users WHERE id = ?', [payload.id]);
+  const row = await getDb().get(
+    'SELECT id, username, role, password_changed_at FROM users WHERE id = ?',
+    [payload.id]
+  );
   if (!row) return null;
+
+  // A password change revokes every token issued before it, which is the only
+  // way to boot an attacker who already holds a stolen session.
+  if (row.password_changed_at && payload.iat) {
+    const changedAt = new Date(row.password_changed_at).getTime();
+    // One second of slack: `iat` is whole seconds, the column is sub-second.
+    if (Number.isFinite(changedAt) && payload.iat * 1000 < changedAt - 1000) {
+      return null;
+    }
+  }
 
   return { id: row.id, username: row.username, role: row.role as UserRole };
 }

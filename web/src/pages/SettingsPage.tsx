@@ -5,8 +5,11 @@ import { useToast } from '../context/ToastContext';
 import { Spinner } from '../components/ui/Spinner';
 import { RoleBadge } from '../components/ui/RoleBadge';
 
+/** Kept in step with MIN_PASSWORD_LENGTH on the server. */
+const MIN_PASSWORD_LENGTH = 10;
+
 export function SettingsPage() {
-  const { apiFetch, user } = useAuth();
+  const { apiFetch, user, login } = useAuth();
   const { showToast } = useToast();
 
   const [currentPassword, setCurrentPassword] = useState('');
@@ -24,12 +27,19 @@ export function SettingsPage() {
 
     setLoading(true);
     try {
-      await apiFetch('/api/auth/change-password', {
+      // Changing the password revokes every token issued before it, this tab's
+      // included, so the reply carries a replacement to swap in.
+      const result = await apiFetch<{ token?: string }>('/api/auth/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ currentPassword, newPassword })
       });
-      showToast('Password berhasil diubah.');
+
+      if (result?.token && user) {
+        login(result.token, user);
+      }
+
+      showToast('Password berhasil diubah. Sesi lain telah dikeluarkan.');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
@@ -82,11 +92,11 @@ export function SettingsPage() {
               className="form-input"
               id="new-password"
               type="password"
-              placeholder="Minimal 6 karakter"
+              placeholder={`Minimal ${MIN_PASSWORD_LENGTH} karakter`}
               value={newPassword}
               onChange={event => setNewPassword(event.target.value)}
               required
-              minLength={6}
+              minLength={MIN_PASSWORD_LENGTH}
               autoComplete="new-password"
             />
           </div>
@@ -100,7 +110,7 @@ export function SettingsPage() {
               value={confirmPassword}
               onChange={event => setConfirmPassword(event.target.value)}
               required
-              minLength={6}
+              minLength={MIN_PASSWORD_LENGTH}
               autoComplete="new-password"
             />
           </div>

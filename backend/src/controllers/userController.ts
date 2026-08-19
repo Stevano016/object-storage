@@ -2,9 +2,9 @@ import { Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { getDb, hashPassword, UserRole } from '../utils/db.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
+import { validatePasswordStrength } from '../utils/password.js';
 
 const USERNAME_REGEX = /^[a-zA-Z0-9._-]{3,32}$/;
-const MIN_PASSWORD_LENGTH = 6;
 const ROLES: UserRole[] = ['superadmin', 'user'];
 
 interface UserRow {
@@ -28,11 +28,9 @@ function validateUsername(username: unknown): string | null {
   return null;
 }
 
-function validatePassword(password: unknown): string | null {
-  if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) {
-    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters long.`;
-  }
-  return null;
+/** Same policy the self-service password change uses, so neither path is weaker. */
+function validatePassword(password: unknown, username?: unknown): string | null {
+  return validatePasswordStrength(password, typeof username === 'string' ? username : undefined);
 }
 
 function validateRole(role: unknown): string | null {
@@ -62,7 +60,8 @@ export async function listUsers(req: AuthenticatedRequest, res: Response) {
 export async function createUser(req: AuthenticatedRequest, res: Response) {
   const { username, password, role = 'user' } = req.body;
 
-  const validationError = validateUsername(username) || validatePassword(password) || validateRole(role);
+  const validationError =
+    validateUsername(username) || validatePassword(password, username) || validateRole(role);
   if (validationError) {
     return res.status(400).json({ error: validationError });
   }
@@ -120,11 +119,17 @@ export async function updateUser(req: AuthenticatedRequest, res: Response) {
     }
 
     if (password !== undefined) {
-      const passwordError = validatePassword(password);
+      const nextUsername = username === undefined ? target.username : username;
+      const passwordError = validatePassword(password, nextUsername);
       if (passwordError) return res.status(400).json({ error: passwordError });
 
       updates.push('password_hash = ?');
       params.push(await hashPassword(password));
+
+      // An admin resetting someone's password also ends that account's sessions,
+      // which is the point of the reset when an account is suspected stolen.
+      updates.push('password_changed_at = ?');
+      params.push(db.toTimestamp(new Date()));
     }
 
     if (role !== undefined && role !== target.role) {

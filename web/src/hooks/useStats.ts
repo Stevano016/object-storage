@@ -12,7 +12,8 @@ const EMPTY_STATS: Stats = {
   users: 0,
   disk: null,
   diskLabel: '',
-  storageProvider: 'local'
+  storageProvider: 'local',
+  accountsUsingDefaultPassword: []
 };
 
 export function useStats() {

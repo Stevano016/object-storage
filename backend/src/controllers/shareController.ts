@@ -10,6 +10,7 @@ import {
   removeBucketFile,
   discardTempUpload
 } from './fileController.js';
+import { QuotaExceededError } from '../utils/quota.js';
 
 const PERMISSIONS: SharePermission[] = ['viewer', 'editor'];
 const MAX_EXPIRY_DAYS = 3650;
@@ -227,8 +228,13 @@ export async function uploadSharedFile(req: ShareRequest, res: Response) {
     const stored = await storeUploadedFile(share.bucketId, share.bucketName, file);
     res.status(201).json({ ...stored, message: 'Berkas berhasil diunggah.' });
   } catch (error) {
-    console.error('Shared upload error:', error);
     discardTempUpload(file);
+
+    if (error instanceof QuotaExceededError) {
+      return res.status(413).json({ error: error.detail });
+    }
+
+    console.error('Shared upload error:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 }

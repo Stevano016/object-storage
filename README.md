@@ -5,11 +5,14 @@ Sistem penyimpanan objek (*Object Storage*) mandiri (self-hosted) yang ringan, b
 ## Fitur Utama
 
 - 📂 **Bucket Management**: Buat, hapus, dan atur visibilitas bucket (Publik atau Privat).
+- 📏 **Kuota per Bucket**: Batasi tiap bucket dalam MB/GB/TB, dengan bilah pemakaian di dasbor dan penolakan unggahan (HTTP 413) saat kuota habis.
 - 📤 **Media Streamer & Range Queries**: Mendukung penuh pemutaran video dan audio langsung di peramban (HTTP 206 Partial Content) tanpa lemot/buffering berlebih.
 - 🛡️ **Security-First Design**:
   - **Path Traversal Protection**: Semua file disimpan menggunakan identitas fisik UUID di disk lokal untuk mencegah serangan pembacaan file sistem (`../`).
   - **API Key Hashing**: Token integrasi disimpan dalam hash SHA-256 di database SQLite.
-  - **Fallback Authentication**: Mendukung query string `?token=...` untuk pemutaran video/gambar privat langsung di HTML `<video>` / `<img>`.
+  - **Fallback Authentication**: Endpoint media `/s/...` menerima query string `?token=...` untuk pemutaran video/gambar privat langsung di HTML `<video>` / `<img>`. Endpoint `/api/*` hanya menerima header `Authorization`, agar token tidak tercatat di log proxy.
+  - **Anti Stored-XSS**: Berkas yang bisa dieksekusi peramban (HTML, SVG) dipaksa menjadi unduhan `application/octet-stream`, bukan dirender inline dari origin dasbor.
+  - **Pembatasan Percobaan Login**: Blokir per IP dan jeda menanjak per username, tanpa memberi penyerang cara mengunci akun admin.
 - 🔑 **Programmatic API Keys**: Buat API Key untuk digunakan oleh skrip backup atau aplikasi luar lainnya.
 - ⚡ **Zero Cache / Low Memory**: File dialirkan langsung dari filesystem (*readable streams*) tanpa membebani RAM server VPS.
 - 📊 **Dasbor Admin Premium**: Didesain menggunakan sistem warna OKLCH dan Vanilla CSS yang bersih, interaktif, responsif, dan bebas dari clutter.
@@ -46,6 +49,10 @@ Pastikan Anda memiliki **Node.js (v18 ke atas)** dan **npm** terinstal di komput
    ```bash
    copy .env.example .env
    ```
+   Lalu isi `JWT_SECRET` dengan nilai acak — **server menolak start bila belum diisi**:
+   ```bash
+   openssl rand -base64 48
+   ```
 4. Jalankan backend dalam mode development:
    ```bash
    npm run dev
@@ -55,8 +62,11 @@ Pastikan Anda memiliki **Node.js (v18 ke atas)** dan **npm** terinstal di komput
    > Pada saat pertama kali dijalankan, sistem akan otomatis membuat database SQLite dan men-seed pengguna admin default:
    > - **Username**: `admin`
    > - **Password**: `admingentan123`
-   > 
-   > Harap segera ganti password ini di tab **Settings** dasbor setelah berhasil masuk.
+   >
+   > Password ini tertulis di berkas README yang Anda baca sekarang, jadi ia bukan
+   > rahasia. Selama masih dipakai, dasbor akan menampilkan spanduk merah dan
+   > server mencatat peringatan di log setiap kali start. Ganti di tab
+   > **Pengaturan** sebelum instance ini bisa dijangkau dari internet.
 
 ### 2. Setup Frontend (Dashboard)
 1. Buka terminal baru di folder `web/`.
@@ -148,6 +158,79 @@ Aplikasi Anda kini akan mengunggah file-file biner langsung ke MinIO, sementara 
 
 ---
 
+## Kuota Bucket
+
+Setiap bucket bisa diberi batas penyimpanan sendiri, terlepas dari kapasitas disk server. Kuota diatur saat membuat bucket, atau kapan saja lewat tombol **kuota** (ikon meter) di baris bucket pada tab **Buckets**.
+
+- Satuan yang tersedia: **MB**, **GB**, **TB**. Minimum 1 MB.
+- **Kosongkan kolomnya untuk tanpa batas** — bucket hanya dibatasi kapasitas disk.
+- Kolom *Ukuran / Kuota* menampilkan pemakaian beserta bilah warna: hijau, kuning mulai 90%, merah saat penuh.
+
+Kuota dihitung dari total ukuran berkas yang terdaftar di bucket itu, bukan dari ukuran folder di disk. Unggahan yang akan melewati batas ditolak dengan **HTTP 413** beserta pesan berapa sisa ruangnya — berlaku sama untuk unggahan dari dasbor, dari API Key, maupun dari tautan berbagi bertipe *editor*.
+
+Menurunkan kuota di bawah isi bucket saat ini **diizinkan** dan tidak menghapus berkas apa pun; efeknya hanya unggahan berikutnya ditolak sampai ada berkas yang dihapus. Dasbor memberi tahu bila kuota yang Anda simpan sudah terlampaui.
+
+> [!NOTE]
+> Pemeriksaan kuota dilakukan sebelum berkas dipindahkan ke storage. Dua unggahan yang berjalan bersamaan bisa lolos berbarengan dan membuat total sedikit melewati batas; unggahan setelahnya langsung ditolak. Kuota di sini adalah plafon, bukan pagar byte yang presisi.
+
+Lewat API, kolomnya bernama `quotaBytes` (satuan byte, `null` berarti tanpa batas):
+
+```bash
+# Buat bucket dengan kuota 5 GB
+curl -X POST http://localhost:5000/api/buckets   -H "Authorization: Bearer <JWT>" -H "Content-Type: application/json"   -d '{"name":"foto-2026","isPublic":false,"quotaBytes":5368709120}'
+
+# Ubah kuota bucket yang sudah ada (respons memuat usedBytes)
+curl -X PUT http://localhost:5000/api/buckets/foto-2026   -H "Authorization: Bearer <JWT>" -H "Content-Type: application/json"   -d '{"quotaBytes":10737418240}'
+
+# Lepas kuota
+curl -X PUT http://localhost:5000/api/buckets/foto-2026   -H "Authorization: Bearer <JWT>" -H "Content-Type: application/json"   -d '{"quotaBytes":null}'
+```
+
+`PUT /api/buckets/:name` bersifat parsial: kirim `isPublic` saja, `quotaBytes` saja, atau keduanya. Kolom yang tidak dikirim tidak berubah.
+
+## Keamanan
+
+Instance ini dipublikasikan ke internet lewat Cloudflare Tunnel, jadi pengamanannya diperlakukan sebagai bagian dari fitur, bukan tambahan.
+
+### Sesi dan password
+
+- **`JWT_SECRET` wajib**, minimal 32 karakter, dan tidak boleh nilai placeholder dari repo ini. Bila salah satu syarat tidak dipenuhi, server berhenti dengan pesan yang menjelaskan cara memperbaikinya. Dulu ada nilai bawaan di kode — siapa pun yang membaca repo bisa memalsukan token Super Admin.
+- Umur token **24 jam** (bisa diatur lewat `JWT_EXPIRES_IN`), sebelumnya 7 hari.
+- **Mengganti password mencabut semua sesi lama** akun itu, termasuk sesi yang mungkin sedang dipegang penyusup. Tab yang melakukan penggantian langsung mendapat token baru sehingga tidak perlu login ulang. Super Admin yang mereset password orang lain juga mengeluarkan sesi orang tersebut.
+- Password minimal **10 karakter**, tidak boleh memuat username, dan tidak boleh berupa password yang sudah tersiar (termasuk `admingentan123`).
+- Token sesi **hanya diterima dari header `Authorization`** pada endpoint `/api/*`. Sebelumnya `?token=` juga diterima, dan itu membuat token tercatat di log Apache, log Cloudflare, serta header `Referer`. Endpoint media `/s/...` tetap menerima `?token=` karena `<video>` dan `<img>` tidak bisa mengirim header.
+
+### Percobaan login
+
+- Per alamat IP: 15 kegagalan dalam 5 menit → diblokir 15 menit (**HTTP 429** dengan header `Retry-After`).
+- Per username: **tidak pernah diblokir**, tetapi setiap kegagalan menambah jeda balasan 0,5 detik hingga maksimum 4 detik. Blokir per username akan memberi penyerang cara mengunci akun admin dengan sengaja; jeda yang menanjak membuat penebakan tersebar dari ribuan IP tetap tidak praktis tanpa menutup pintu bagi pemilik akun.
+- Username yang tidak ada tetap diperiksa terhadap hash tiruan, supaya lama respons tidak membocorkan akun mana yang benar-benar ada.
+- Endpoint tautan berbagi dibatasi 120 permintaan per menit per IP.
+
+### Penyajian berkas
+
+Tipe MIME sebuah berkas ditentukan oleh pengunggah, dan berkas disajikan dari origin yang sama dengan dasbor. Berkas HTML atau SVG yang dirender langsung bisa membaca token sesi dari `localStorage`. Karena itu:
+
+- Hanya **gambar (kecuali SVG), video, audio, PDF, dan teks biasa** yang disajikan `inline`.
+- Tipe lain dipaksa menjadi `Content-Disposition: attachment` dengan `Content-Type: application/octet-stream` plus `Content-Security-Policy: default-src 'none'; sandbox`.
+- Semua respons berkas membawa `X-Content-Type-Options: nosniff`.
+- Nama berkas pada header `Content-Disposition` di-escape (bentuk ASCII bersih + `filename*=UTF-8''`), sehingga nama bertanda kutip atau berisi baris baru tidak bisa memecah atau menyuntikkan header.
+
+### Header dan konfigurasi
+
+- Dasbor dikirim dengan `Content-Security-Policy` yang membatasi skrip ke bundle sendiri, ditambah `Cross-Origin-Opener-Policy`.
+- Semua respons: `X-Content-Type-Options`, `Referrer-Policy: no-referrer`, `X-Frame-Options: SAMEORIGIN`, `Permissions-Policy`, dan `Strict-Transport-Security` saat diakses lewat HTTPS.
+- `X-Powered-By` dimatikan; body JSON dibatasi 256 KB.
+- `TRUST_PROXY` default `loopback` sehingga hanya reverse proxy di mesin yang sama boleh menetapkan `X-Forwarded-For`. Alamat asli pengunjung dibaca dari `CF-Connecting-IP`, tetapi **hanya** bila permintaan datang lewat proxy lokal — klien di LAN yang menembak port 5000 langsung tidak bisa memalsukannya untuk mengelabui pembatas login.
+
+### Yang masih perlu Anda kerjakan sendiri
+
+- **API Key belum punya cakupan**: satu key berlaku untuk semua bucket, dan boleh menghapus berkas. Perlakukan setiap key seperti password Super Admin, dan cabut yang tidak dipakai.
+- `?api_key=` masih diterima di endpoint `/api/*` agar skrip lama tidak rusak. Kalau bisa, pindahkan ke header `X-API-Key` supaya key tidak tercatat di log.
+- **Port MinIO (9001 dan 9010) jangan dipublikasikan** lewat tunnel atau firewall. Keduanya dirancang untuk diakses dari LAN/Tailscale saja.
+- `CORS_ORIGIN` bawaan `*`. Bila hanya dasbor sendiri yang memakai API, isi daftar origin yang spesifik.
+- Belum ada catatan audit (siapa mengunggah atau menghapus apa).
+
 ## Peran Pengguna (Role)
 
 Setiap akun memiliki salah satu dari dua peran. Pembatasan diterapkan di sisi server, bukan sekadar disembunyikan di antarmuka.
@@ -159,6 +242,7 @@ Setiap akun memiliki salah satu dari dua peran. Pembatasan diterapkan di sisi se
 | Mengunduh / streaming berkas | ✅ | ✅ |
 | Menghapus berkas | ✅ | ❌ |
 | Membuat, mengubah, menghapus bucket | ✅ | ❌ |
+| Mengatur kuota bucket | ✅ | ❌ |
 | Membuat dan mencabut API Key | ✅ | ❌ |
 | Menambah, mengubah, menghapus pengguna | ✅ | ❌ |
 | Membuat dan mencabut tautan berbagi | ✅ | ❌ |
@@ -300,6 +384,14 @@ docker compose up -d --build
 ```
 
 Seluruh rahasia dibaca dari berkas `.env` di direktori yang sama (lihat `backend/.env.example` untuk daftar lengkapnya). Berkas itu tidak masuk Git, dan `docker-compose.yml` menandai `JWT_SECRET`, `MINIO_ROOT_USER`, serta `MINIO_ROOT_PASSWORD` sebagai wajib — stack menolak menyala kalau salah satunya kosong, supaya tidak pernah diam-diam memakai nilai bawaan yang terpampang di repositori ini.
+
+> [!IMPORTANT]
+> Aplikasi kini juga menolak start bila `JWT_SECRET` **kurang dari 32 karakter** atau masih berisi placeholder `ganti_dengan_nilai_acak_yang_panjang`. Periksa sebelum `git pull` berikutnya:
+> ```bash
+> cd /www/wwwroot/gentan.storage
+> awk -F= '/^JWT_SECRET=/{print length($2)" karakter"}' .env
+> ```
+> Kalau kurang dari 32, ganti dulu (`openssl rand -base64 48`). Menggantinya mengeluarkan semua sesi dasbor yang sedang aktif — cukup login ulang.
 
 Dua hal yang tidak boleh diubah sembarangan:
 
