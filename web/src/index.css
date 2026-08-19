@@ -1552,3 +1552,133 @@ p { color: var(--text-secondary); }
   font-size: 0.65rem;
   color: var(--text-muted);
 }
+
+/* ==========================================================================
+   Folders inside a bucket
+   ========================================================================== */
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.15rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.85rem;
+}
+
+.breadcrumb-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.breadcrumb-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.5rem;
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  color: var(--accent-primary);
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.breadcrumb-item:hover:not(:disabled):not(.is-current) {
+  background-color: var(--bg-tertiary);
+}
+
+/* The folder you are already in: not a control, so it must not look like one. */
+.breadcrumb-item.is-current,
+.breadcrumb-item:disabled {
+  color: var(--text-primary);
+  font-weight: 600;
+  cursor: default;
+}
+
+.breadcrumb-separator {
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* Folders sit above the files in a denser grid — they are navigation, not content. */
+.folder-grid {
+  display: grid;
+  /* Wide enough that a folder name survives next to the icon and the two action
+     buttons: at 210px the name was clipped after eight characters. */
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.folder-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.folder-card:hover {
+  border-color: var(--accent-border);
+  background-color: var(--bg-tertiary);
+}
+
+.folder-card-icon {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  color: var(--accent-primary);
+}
+
+.folder-card-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex-grow: 1;
+}
+
+.folder-card-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-card-meta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 0.1rem;
+}
+
+/* Revealed on hover so a wall of folders stays calm, but always shown on touch
+   devices, where there is no hover to reveal them with. */
+.folder-card-actions {
+  display: flex;
+  gap: 0.3rem;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.folder-card:hover .folder-card-actions,
+.folder-card:focus-within .folder-card-actions {
+  opacity: 1;
+}
+
+@media (pointer: coarse) {
+  .folder-card-actions {
+    opacity: 1;
+  }
+}

@@ -202,7 +202,11 @@ export async function listSharedFiles(req: ShareRequest, res: Response) {
       page: parseInt(req.query.page as string) || 1,
       limit: parseInt(req.query.limit as string) || 24,
       search: (req.query.search as string) || '',
-      fileId: share.fileId
+      fileId: share.fileId,
+      // Flat on purpose: a link handed out before folders existed showed every
+      // file in the bucket, and it still does. Folder navigation on a public
+      // page would also leak the folder names of a bucket-wide link.
+      flat: true
     }));
   } catch (error) {
     console.error('List shared files error:', error);

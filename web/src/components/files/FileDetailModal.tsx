@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link2 } from 'lucide-react';
+import { FolderInput, Link2 } from 'lucide-react';
 import { FilePreviewModal } from './FilePreviewModal';
 import type { PreviewLink } from './FilePreviewModal';
 import { Spinner } from '../ui/Spinner';
@@ -13,6 +13,8 @@ interface FileDetailModalProps {
   bucket: Bucket | undefined;
   canDelete: boolean;
   canShare: boolean;
+  /** Absent for accounts that may not reorganise the bucket. */
+  onMove?: (file: FileItem) => void;
   onDelete: (fileId: string) => void;
   /** Mints a public, login-free link to this single file. */
   onCreateShare: (fileId: string) => Promise<ShareLink | null>;
@@ -25,6 +27,7 @@ export function FileDetailModal({
   bucket,
   canDelete,
   canShare,
+  onMove,
   onDelete,
   onCreateShare,
   onClose
@@ -88,12 +91,20 @@ export function FileDetailModal({
       onDelete={canDelete ? () => onDelete(file.id) : undefined}
       onClose={onClose}
       extraActions={
-        canShare && !share ? (
-          <button className="btn btn-secondary" onClick={() => void handleShare()} disabled={sharing}>
-            {sharing ? <Spinner size={16} /> : <Link2 style={{ width: 16, height: 16 }} />}
-            Buat Tautan Berbagi
-          </button>
-        ) : undefined
+        <>
+          {onMove && (
+            <button className="btn btn-secondary" onClick={() => onMove(file)}>
+              <FolderInput style={{ width: 16, height: 16 }} />
+              Pindahkan
+            </button>
+          )}
+          {canShare && !share && (
+            <button className="btn btn-secondary" onClick={() => void handleShare()} disabled={sharing}>
+              {sharing ? <Spinner size={16} /> : <Link2 style={{ width: 16, height: 16 }} />}
+              Buat Tautan Berbagi
+            </button>
+          )}
+        </>
       }
     />
   );

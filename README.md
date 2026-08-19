@@ -5,6 +5,7 @@ Sistem penyimpanan objek (*Object Storage*) mandiri (self-hosted) yang ringan, b
 ## Fitur Utama
 
 - 📂 **Bucket Management**: Buat, hapus, dan atur visibilitas bucket (Publik atau Privat).
+- 🗂️ **Folder Bersarang**: Bagi bucket menjadi folder berlapis, unggah langsung ke folder yang sedang dibuka, dan pindahkan berkas tanpa memindahkan byte.
 - 🖼️ **Foto HEIC iPhone**: didekode di peramban agar tetap bisa dipratinjau, plus tombol unduh sebagai JPG untuk perangkat yang tidak mengenal HEIC.
 - 📏 **Kuota per Bucket**: Batasi tiap bucket dalam MB/GB/TB, dengan bilah pemakaian di dasbor dan penolakan unggahan (HTTP 413) saat kuota habis.
 - 📤 **Media Streamer & Range Queries**: Mendukung penuh pemutaran video dan audio langsung di peramban (HTTP 206 Partial Content) tanpa lemot/buffering berlebih.
@@ -158,6 +159,58 @@ pm2 restart gentan-storage
 Aplikasi Anda kini akan mengunggah file-file biner langsung ke MinIO, sementara metadata file tetap tersimpan di database SQLite lokal untuk performa query pencarian yang cepat.
 
 ---
+
+## Folder di Dalam Bucket
+
+Setiap bucket bisa dibagi menjadi folder, dan folder bisa berisi folder lagi tanpa batas kedalaman. Pengelolaannya ada di tab **File Browser**:
+
+- **Buat Folder** membuat folder di lokasi yang sedang dibuka — perhatikan breadcrumb di atas daftar untuk tahu di mana Anda berada.
+- Klik kartu folder untuk masuk; klik nama bucket atau folder induk di breadcrumb untuk kembali.
+- Ikon pensil dan tempat sampah pada kartu folder untuk ganti nama dan hapus.
+- **Unggahan mendarat di folder yang sedang dibuka.** Seret sekumpulan berkas ke folder yang terbuka, dan semuanya masuk ke situ.
+- Berkas yang sudah ada bisa dipindahkan lewat tombol **Pindahkan** di dialog detail berkas.
+
+### Folder adalah metadata, bukan direktori
+
+Objek tetap tersimpan rata di penyimpanan, satu per ID berkas. Konsekuensinya:
+
+- Ganti nama atau pindahkan folder **berlaku seketika** berapa pun isinya, karena yang berubah hanya satu baris database — tidak ada byte yang dipindahkan.
+- **Tautan langsung ke berkas tetap hidup** setelah berkasnya dipindahkan, karena URL memakai ID berkas, bukan jalur folder.
+- Dua folder berbeda boleh memuat berkas dengan nama sama. Nama folder sendiri harus unik di antara saudara sekandung.
+- Nama folder maksimal 80 karakter dan tidak boleh memuat `/ \ : * ? " < > |`.
+
+### Menghapus folder
+
+Menghapus folder **menghapus seluruh isinya**, termasuk subfolder beserta berkas di dalamnya. Objeknya dihapus dari penyimpanan lebih dulu, lalu barisnya — kalau hanya barisnya yang dihapus, byte-nya akan tetap menggerus kuota bucket sebagai berkas hantu yang tak terlihat siapa pun. Dialog konfirmasi menyebutkan berapa subfolder dan berapa berkas yang akan ikut hilang.
+
+### Siapa yang boleh mengubah struktur
+
+Membuat, mengganti nama, menghapus folder, dan memindahkan berkas adalah **hak Super Admin**, sama seperti pengelolaan bucket. User biasa tetap bisa menelusuri folder dan mengunggah ke dalamnya.
+
+### Tautan berbagi tetap rata
+
+Halaman berbagi publik menampilkan **seluruh berkas di bucket** tanpa struktur folder, sama seperti sebelum fitur ini ada. Dua alasan: tautan yang sudah Anda bagikan sebelumnya tidak berubah perilakunya, dan nama-nama folder Anda tidak bocor ke orang luar yang hanya diberi satu tautan. Unggahan lewat tautan *editor* mendarat di akar bucket.
+
+### Lewat API
+
+```bash
+# Buat folder di akar
+curl -X POST http://localhost:5000/api/buckets/kegiatan/folders   -H "Authorization: Bearer <JWT>" -H "Content-Type: application/json"   -d '{"name":"Dokumentasi Hari 1","parentId":null}'
+
+# Buat subfolder
+curl -X POST http://localhost:5000/api/buckets/kegiatan/folders   -H "Authorization: Bearer <JWT>" -H "Content-Type: application/json"   -d '{"name":"Foto","parentId":"<id-folder-induk>"}'
+
+# Lihat isi satu folder (folders + files + breadcrumb dalam satu respons)
+curl "http://localhost:5000/api/buckets/kegiatan/files?folderId=<id>"   -H "Authorization: Bearer <JWT>"
+
+# Unggah ke dalam folder
+curl -X POST http://localhost:5000/api/buckets/kegiatan/files   -H "X-API-Key: <API_KEY>" -F "folderId=<id>" -F "file=@foto.jpg"
+
+# Pindahkan berkas (null = kembali ke akar)
+curl -X PUT http://localhost:5000/api/buckets/kegiatan/files/<id-berkas>   -H "Authorization: Bearer <JWT>" -H "Content-Type: application/json"   -d '{"folderId":"<id-folder>"}'
+```
+
+`GET /api/buckets/:name/folders` mengembalikan seluruh pohon folder secara datar dalam urutan pohon, lengkap dengan `depth` — dipakai oleh pemilih tujuan pada dialog Pindahkan.
 
 ## Kuota Bucket
 

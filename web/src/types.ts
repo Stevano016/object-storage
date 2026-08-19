@@ -21,6 +21,30 @@ export interface Bucket {
   quotaBytes: number | null;
 }
 
+/** A folder inside a bucket. Folders are metadata; objects stay flat in storage. */
+export interface FolderItem {
+  id: string;
+  name: string;
+  parentId: string | null;
+  createdAt: string;
+  fileCount: number;
+  subfolderCount: number;
+}
+
+/** One step of the breadcrumb, bucket root excluded. */
+export interface FolderCrumb {
+  id: string;
+  name: string;
+}
+
+/** Flattened tree for the "move to folder" picker. */
+export interface FolderOption {
+  id: string;
+  name: string;
+  parentId: string | null;
+  depth: number;
+}
+
 export interface FileItem {
   id: string;
   name: string;

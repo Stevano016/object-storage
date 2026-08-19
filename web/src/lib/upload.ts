@@ -22,6 +22,8 @@ interface UploadOptions {
   url: string;
   file: File;
   headers?: Record<string, string>;
+  /** Extra multipart fields, e.g. the folder the file belongs in. */
+  fields?: Record<string, string>;
   onProgress?: (percent: number) => void;
 }
 
@@ -29,10 +31,18 @@ interface UploadOptions {
  * Uploads through XMLHttpRequest rather than fetch, because only XHR reports
  * upload progress — important for the large media files this server targets.
  */
-export function uploadWithProgress({ url, file, headers = {}, onProgress }: UploadOptions): Promise<void> {
+export function uploadWithProgress({
+  url,
+  file,
+  headers = {},
+  fields = {},
+  onProgress
+}: UploadOptions): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const formData = new FormData();
+    // Fields first: multer only exposes text fields that arrived before the file.
+    Object.entries(fields).forEach(([key, value]) => formData.append(key, value));
     formData.append('file', file);
 
     xhr.open('POST', url);

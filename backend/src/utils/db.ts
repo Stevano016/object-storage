@@ -45,16 +45,28 @@ const SQLITE_SCHEMA = `
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS folders (
+    id TEXT PRIMARY KEY,
+    bucket_id TEXT NOT NULL,
+    parent_id TEXT,
+    name TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(bucket_id) REFERENCES buckets(id) ON DELETE CASCADE,
+    FOREIGN KEY(parent_id) REFERENCES folders(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS files (
     id TEXT PRIMARY KEY,
     bucket_id TEXT NOT NULL,
+    folder_id TEXT,
     name TEXT NOT NULL,
     original_name TEXT NOT NULL,
     mime_type TEXT NOT NULL,
     size INTEGER NOT NULL,
     physical_path TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(bucket_id) REFERENCES buckets(id) ON DELETE CASCADE
+    FOREIGN KEY(bucket_id) REFERENCES buckets(id) ON DELETE CASCADE,
+    FOREIGN KEY(folder_id) REFERENCES folders(id) ON DELETE CASCADE
   );
 
   CREATE TABLE IF NOT EXISTS shares (
@@ -78,6 +90,9 @@ const SQLITE_SCHEMA = `
   );
 
   CREATE INDEX IF NOT EXISTS idx_files_bucket ON files(bucket_id);
+  CREATE INDEX IF NOT EXISTS idx_files_folder ON files(folder_id);
+  CREATE INDEX IF NOT EXISTS idx_folders_bucket ON folders(bucket_id);
+  CREATE INDEX IF NOT EXISTS idx_folders_parent ON folders(parent_id);
   CREATE INDEX IF NOT EXISTS idx_files_name ON files(name);
   CREATE INDEX IF NOT EXISTS idx_shares_token ON shares(token);
   CREATE INDEX IF NOT EXISTS idx_shares_bucket ON shares(bucket_id);
@@ -103,9 +118,22 @@ const MYSQL_SCHEMA = `
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+  CREATE TABLE IF NOT EXISTS folders (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    bucket_id VARCHAR(36) NOT NULL,
+    parent_id VARCHAR(36) NULL,
+    name VARCHAR(255) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_folders_bucket (bucket_id),
+    KEY idx_folders_parent (parent_id),
+    CONSTRAINT fk_folders_bucket FOREIGN KEY (bucket_id) REFERENCES buckets(id) ON DELETE CASCADE,
+    CONSTRAINT fk_folders_parent FOREIGN KEY (parent_id) REFERENCES folders(id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
   CREATE TABLE IF NOT EXISTS files (
     id VARCHAR(36) NOT NULL PRIMARY KEY,
     bucket_id VARCHAR(36) NOT NULL,
+    folder_id VARCHAR(36) NULL,
     name VARCHAR(255) NOT NULL,
     original_name VARCHAR(512) NOT NULL,
     mime_type VARCHAR(191) NOT NULL,
@@ -114,7 +142,9 @@ const MYSQL_SCHEMA = `
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     KEY idx_files_bucket (bucket_id),
     KEY idx_files_name (name),
-    CONSTRAINT fk_files_bucket FOREIGN KEY (bucket_id) REFERENCES buckets(id) ON DELETE CASCADE
+    KEY idx_files_folder (folder_id),
+    CONSTRAINT fk_files_bucket FOREIGN KEY (bucket_id) REFERENCES buckets(id) ON DELETE CASCADE,
+    CONSTRAINT fk_files_folder FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
   CREATE TABLE IF NOT EXISTS shares (
@@ -172,6 +202,14 @@ async function runMigrations(database: SqlDatabase) {
     const columnType = database.dialect === 'mysql' ? 'DATETIME NULL' : 'DATETIME';
     await database.exec(`ALTER TABLE users ADD COLUMN password_changed_at ${columnType}`);
     console.log('MIGRATION: users.password_changed_at added.');
+  }
+
+  // v6: folders inside buckets. Existing files stay at the bucket root, which is
+  // what folder_id NULL means, so nothing moves and no listing changes shape.
+  if (!(await database.hasColumn('files', 'folder_id'))) {
+    const columnType = database.dialect === 'mysql' ? 'VARCHAR(36) NULL' : 'TEXT';
+    await database.exec(`ALTER TABLE files ADD COLUMN folder_id ${columnType}`);
+    console.log('MIGRATION: files.folder_id added; existing files stay at the bucket root.');
   }
 
   // v5: repair files stored before the extension fallback existed. Chrome on

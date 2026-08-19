@@ -1,15 +1,20 @@
 import { useState } from 'react';
-import { File as FileIcon, Folder, Search, UploadCloud } from 'lucide-react';
+import { File as FileIcon, Folder, FolderPlus, Search, UploadCloud } from 'lucide-react';
 import { FileCard } from '../components/files/FileCard';
 import { FileDetailModal } from '../components/files/FileDetailModal';
+import { FolderBreadcrumb } from '../components/files/FolderBreadcrumb';
+import { FolderCard } from '../components/files/FolderCard';
+import { FolderNameModal } from '../components/files/FolderNameModal';
+import { MoveFileModal } from '../components/files/MoveFileModal';
 import { UploadModal } from '../components/files/UploadModal';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
 import { useAuth } from '../context/AuthContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { useFiles } from '../hooks/useFiles';
 import { useShares } from '../hooks/useShares';
 import { buildFileUrl } from '../lib/files';
-import type { Bucket, FileItem } from '../types';
+import type { Bucket, FileItem, FolderItem } from '../types';
 
 interface FilesPageProps {
   buckets: Bucket[];
@@ -26,9 +31,18 @@ export function FilesPage({
   onStorageChanged
 }: FilesPageProps) {
   const { apiUrl, token, isSuperAdmin } = useAuth();
+  const confirm = useConfirm();
   const { createShare } = useShares();
   const {
     files,
+    folders,
+    path,
+    folderId,
+    openFolder,
+    createFolder,
+    renameFolder,
+    deleteFolder,
+    moveFile,
     loading,
     page,
     totalPages,
@@ -44,6 +58,42 @@ export function FilesPage({
 
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
+  const [showCreateFolder, setShowCreateFolder] = useState(false);
+  const [renamingFolder, setRenamingFolder] = useState<FolderItem | null>(null);
+  const [movingFile, setMovingFile] = useState<FileItem | null>(null);
+
+  // Where the breadcrumb currently points, used in dialog copy.
+  const locationLabel = path.length > 0 ? `folder '${path[path.length - 1].name}'` : `akar bucket '${activeBucket}'`;
+
+  /** Names only what the folder actually holds, so the warning stays believable. */
+  const describeContents = (folder: FolderItem): string => {
+    const parts: string[] = [];
+    if (folder.subfolderCount > 0) parts.push(`${folder.subfolderCount} subfolder`);
+    if (folder.fileCount > 0) parts.push(`${folder.fileCount} berkas`);
+
+    if (parts.length === 0) {
+      return 'Folder ini kosong, jadi tidak ada berkas yang hilang.';
+    }
+
+    const tail = folder.subfolderCount > 0
+      ? 'Semuanya ikut terhapus dari server, termasuk seluruh isi subfoldernya, dan tidak bisa dikembalikan.'
+      : 'Semuanya ikut terhapus dari server dan tidak bisa dikembalikan.';
+
+    return `Folder ini memuat ${parts.join(' dan ')}. ${tail}`;
+  };
+
+  const handleDeleteFolder = async (folder: FolderItem) => {
+    const confirmed = await confirm({
+      title: `Hapus folder '${folder.name}'?`,
+      message: describeContents(folder),
+      confirmLabel: 'Hapus Folder',
+      danger: true
+    });
+    if (!confirmed) return;
+
+    const deleted = await deleteFolder(folder);
+    if (deleted) onStorageChanged();
+  };
 
   const bucket = buckets.find(item => item.name === activeBucket);
   // Private buckets need the session token attached to preview and download URLs.
@@ -97,6 +147,13 @@ export function FilesPage({
               Unggah File
             </button>
           )}
+
+          {activeBucket && isSuperAdmin && (
+            <button className="btn btn-secondary" onClick={() => setShowCreateFolder(true)}>
+              <FolderPlus style={{ width: 18, height: 18 }} />
+              Buat Folder
+            </button>
+          )}
         </div>
 
         {activeBucket && (
@@ -113,6 +170,10 @@ export function FilesPage({
         )}
       </div>
 
+      {activeBucket && (
+        <FolderBreadcrumb bucketName={activeBucket} path={path} onNavigate={openFolder} />
+      )}
+
       {!activeBucket ? (
         <EmptyState
           icon={Folder}
@@ -121,11 +182,15 @@ export function FilesPage({
         />
       ) : loading ? (
         <Spinner block padding="5rem" />
-      ) : files.length === 0 ? (
+      ) : files.length === 0 && folders.length === 0 ? (
         <EmptyState
           icon={FileIcon}
-          title="Bucket Kosong"
-          description={`Belum ada berkas di dalam bucket '${activeBucket}'.`}
+          title={path.length > 0 ? 'Folder Kosong' : 'Bucket Kosong'}
+          description={
+            path.length > 0
+              ? `Belum ada apa pun di dalam folder '${path[path.length - 1].name}'.`
+              : `Belum ada berkas di dalam bucket '${activeBucket}'.`
+          }
           action={
             <button className="btn btn-primary" onClick={() => setShowUploadModal(true)}>
               Unggah File Pertama
@@ -134,6 +199,22 @@ export function FilesPage({
         />
       ) : (
         <div>
+          {/* Folders first, in their own grid: they are navigation, not content,
+              and mixing them into the file grid made both harder to scan. */}
+          {folders.length > 0 && (
+            <div className="folder-grid">
+              {folders.map(folder => (
+                <FolderCard
+                  key={folder.id}
+                  folder={folder}
+                  onOpen={item => openFolder(item.id)}
+                  onRename={isSuperAdmin ? setRenamingFolder : undefined}
+                  onDelete={isSuperAdmin ? item => void handleDeleteFolder(item) : undefined}
+                />
+              ))}
+            </div>
+          )}
+
           <div className="file-grid">
             {files.map(file => (
               <FileCard
@@ -169,6 +250,37 @@ export function FilesPage({
         </div>
       )}
 
+      {showCreateFolder && (
+        <FolderNameModal
+          locationLabel={locationLabel}
+          onSubmit={createFolder}
+          onClose={() => setShowCreateFolder(false)}
+        />
+      )}
+
+      {renamingFolder && (
+        <FolderNameModal
+          initialName={renamingFolder.name}
+          locationLabel={locationLabel}
+          onSubmit={name => renameFolder(renamingFolder, name)}
+          onClose={() => setRenamingFolder(null)}
+        />
+      )}
+
+      {movingFile && (
+        <MoveFileModal
+          file={movingFile}
+          bucketName={activeBucket}
+          currentFolderId={folderId}
+          onMove={async (fileId, target) => {
+            const moved = await moveFile(fileId, target);
+            if (moved) setSelectedFile(null);
+            return moved;
+          }}
+          onClose={() => setMovingFile(null)}
+        />
+      )}
+
       {showUploadModal && (
         <UploadModal
           bucketName={activeBucket}
@@ -186,6 +298,7 @@ export function FilesPage({
           bucket={bucket}
           canDelete={isSuperAdmin}
           canShare={isSuperAdmin}
+          onMove={isSuperAdmin ? setMovingFile : undefined}
           onDelete={fileId => void handleDelete(fileId)}
           onCreateShare={fileId => createShare({
             bucketName: activeBucket,

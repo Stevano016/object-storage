@@ -21,6 +21,13 @@ import {
 import { listBuckets, createBucket, updateBucket, deleteBucket } from './controllers/bucketController.js';
 import { upload, listFiles, uploadFile, downloadFile, deleteFile } from './controllers/fileController.js';
 import { listAPIKeys, createAPIKey, deleteAPIKey } from './controllers/keyController.js';
+import {
+  createFolder,
+  renameFolder,
+  deleteFolder,
+  moveFile,
+  listAllFolders
+} from './controllers/folderController.js';
 import { listUsers, createUser, updateUser, deleteUser } from './controllers/userController.js';
 import { resolveShare, requireShareEditor } from './middleware/share.js';
 import {
@@ -76,10 +83,21 @@ app.post('/api/buckets', authenticateJWT, requireSuperAdmin, createBucket);
 app.put('/api/buckets/:bucketName', authenticateJWT, requireSuperAdmin, updateBucket);
 app.delete('/api/buckets/:bucketName', authenticateJWT, requireSuperAdmin, deleteBucket);
 
+// --- Folders: structural like buckets, so reshaping them is superadmin-only.
+//     Everyone may read the tree, because uploading into a folder needs to know
+//     which folders exist. ---
+app.get('/api/buckets/:bucketName/folders', authenticateJWT, listAllFolders);
+app.post('/api/buckets/:bucketName/folders', authenticateJWT, requireSuperAdmin, createFolder);
+app.put('/api/buckets/:bucketName/folders/:folderId', authenticateJWT, requireSuperAdmin, renameFolder);
+app.delete('/api/buckets/:bucketName/folders/:folderId', authenticateJWT, requireSuperAdmin, deleteFolder);
+
 // --- Files: regular users may list and upload; deleting is privileged ---
 app.get('/api/buckets/:bucketName/files', authenticateFlexible, listFiles);
 app.post('/api/buckets/:bucketName/files', authenticateFlexible, upload.single('file'), uploadFile);
 app.delete('/api/buckets/:bucketName/files/:fileId', authenticateFlexible, requireSuperAdminOrApiKey, deleteFile);
+// Moving is a metadata change, held to the same bar as deleting: it decides what
+// a bucket-wide share link exposes.
+app.put('/api/buckets/:bucketName/files/:fileId', authenticateFlexible, requireSuperAdminOrApiKey, moveFile);
 
 // --- API keys (superadmin only) ---
 app.get('/api/keys', authenticateJWT, requireSuperAdmin, listAPIKeys);

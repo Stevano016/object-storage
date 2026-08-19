@@ -15,6 +15,7 @@ import { MAX_UPLOAD_BYTES, JWT_SECRET } from '../utils/config.js';
 import { assertBucketQuota, QuotaExceededError } from '../utils/quota.js';
 import { contentDisposition, isInlineSafeMimeType, OBJECT_CSP } from '../utils/security.js';
 import { resolveMimeType } from '../utils/mimeTypes.js';
+import { folderPath, listChildFolders, resolveTargetFolder } from '../utils/folders.js';
 
 // Define directories
 const dataDir = path.resolve('data');
@@ -57,6 +58,14 @@ interface ListOptions {
   search: string;
   /** Restricts the listing to a single file, for file-scoped share links. */
   fileId?: string | null;
+  /** Which folder to list; null is the bucket root. Ignored when flat is true. */
+  folderId?: string | null;
+  /**
+   * Lists every file in the bucket regardless of folder. Share links use this:
+   * an existing link kept working when folders arrived because it still shows
+   * the whole bucket rather than suddenly showing only the root.
+   */
+  flat?: boolean;
 }
 
 const toFileDto = (row: any): FileDto => ({
@@ -75,7 +84,7 @@ const toFileDto = (row: any): FileDto => ({
 
 export async function listBucketFiles(bucketId: string, options: ListOptions) {
   const db = getDb();
-  const { page, limit, search, fileId } = options;
+  const { page, limit, search, fileId, folderId = null, flat = false } = options;
   const offset = (page - 1) * limit;
 
   const filters = ['bucket_id = ?'];
@@ -84,6 +93,10 @@ export async function listBucketFiles(bucketId: string, options: ListOptions) {
   if (fileId) {
     filters.push('id = ?');
     params.push(fileId);
+  }
+  if (!flat) {
+    filters.push(folderId === null ? 'folder_id IS NULL' : 'folder_id = ?');
+    if (folderId !== null) params.push(folderId);
   }
   if (search) {
     filters.push('original_name LIKE ?');
@@ -111,7 +124,8 @@ export async function listBucketFiles(bucketId: string, options: ListOptions) {
 export async function storeUploadedFile(
   bucketId: string,
   bucketName: string,
-  file: Express.Multer.File
+  file: Express.Multer.File,
+  folderId: string | null = null
 ): Promise<FileDto & { url: string }> {
   const db = getDb();
 
@@ -132,9 +146,9 @@ export async function storeUploadedFile(
   const storagePath = await getStorageProvider().uploadFile(bucketId, fileId, file.path, mimeType);
 
   await db.run(
-    `INSERT INTO files (id, bucket_id, name, original_name, mime_type, size, physical_path)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [fileId, bucketId, safeName, file.originalname, mimeType, file.size, storagePath]
+    `INSERT INTO files (id, bucket_id, folder_id, name, original_name, mime_type, size, physical_path)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [fileId, bucketId, folderId, safeName, file.originalname, mimeType, file.size, storagePath]
   );
 
   return {
@@ -185,12 +199,27 @@ export async function listFiles(req: AuthenticatedRequest, res: Response) {
       return res.status(403).json({ error: 'Forbidden: Access to private bucket is restricted.' });
     }
 
-    res.json(await listBucketFiles(bucket.id, {
+    const folder = await resolveTargetFolder(req.query.folderId, bucket.id);
+
+    const listing = await listBucketFiles(bucket.id, {
       page: parseInt(req.query.page as string) || 1,
       limit: parseInt(req.query.limit as string) || 50,
-      search: (req.query.search as string) || ''
-    }));
+      search: (req.query.search as string) || '',
+      folderId: folder?.id ?? null
+    });
+
+    // Folders, files and the breadcrumb travel together: the browser needs all
+    // three to draw one screen, and splitting them would mean three round trips
+    // for every folder the user opens.
+    res.json({
+      ...listing,
+      folders: await listChildFolders(bucket.id, folder?.id ?? null),
+      path: await folderPath(folder?.id ?? null, bucket.id)
+    });
   } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Folder ')) {
+      return res.status(400).json({ error: error.message });
+    }
     console.error('List files error:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
@@ -213,13 +242,20 @@ export async function uploadFile(req: AuthenticatedRequest, res: Response) {
       return res.status(404).json({ error: 'Bucket not found.' });
     }
 
-    const stored = await storeUploadedFile(bucket.id, bucketName, file);
+    // Multipart, so the folder arrives as a form field rather than JSON; the
+    // query string is accepted too for API clients that find that simpler.
+    const folder = await resolveTargetFolder(req.body?.folderId ?? req.query.folderId, bucket.id);
+
+    const stored = await storeUploadedFile(bucket.id, bucketName, file, folder?.id ?? null);
     res.status(201).json({ ...stored, message: 'File uploaded successfully.' });
   } catch (error) {
     discardTempUpload(file);
 
     if (error instanceof QuotaExceededError) {
       return res.status(413).json({ error: error.detail });
+    }
+    if (error instanceof Error && error.message.startsWith('Folder ')) {
+      return res.status(400).json({ error: error.message });
     }
 
     console.error('Upload file error:', error);

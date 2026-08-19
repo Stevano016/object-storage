@@ -18,6 +18,8 @@ export interface UploadItem {
 export interface UploadTarget {
   url: string;
   headers?: Record<string, string>;
+  /** Multipart fields sent with every file in the batch. */
+  fields?: Record<string, string>;
 }
 
 export interface UploadSummary {
@@ -89,6 +91,7 @@ export function useUploads() {
           url: target.url,
           file,
           headers: target.headers ?? {},
+          fields: target.fields ?? {},
           onProgress: percent => update(item.id, { progress: percent })
         });
         update(item.id, { status: 'selesai', progress: 100 });
