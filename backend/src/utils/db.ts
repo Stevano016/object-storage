@@ -90,7 +90,6 @@ const SQLITE_SCHEMA = `
   );
 
   CREATE INDEX IF NOT EXISTS idx_files_bucket ON files(bucket_id);
-  CREATE INDEX IF NOT EXISTS idx_files_folder ON files(folder_id);
   CREATE INDEX IF NOT EXISTS idx_folders_bucket ON folders(bucket_id);
   CREATE INDEX IF NOT EXISTS idx_folders_parent ON folders(parent_id);
   CREATE INDEX IF NOT EXISTS idx_files_name ON files(name);
@@ -210,6 +209,21 @@ async function runMigrations(database: SqlDatabase) {
     const columnType = database.dialect === 'mysql' ? 'VARCHAR(36) NULL' : 'TEXT';
     await database.exec(`ALTER TABLE files ADD COLUMN folder_id ${columnType}`);
     console.log('MIGRATION: files.folder_id added; existing files stay at the bucket root.');
+  }
+
+  // Indexed here rather than in the schema above. On a database that already had
+  // a files table, CREATE TABLE IF NOT EXISTS adds nothing, so the schema would
+  // try to index a column that the migration has not added yet — which aborts
+  // startup with "no such column: folder_id".
+  try {
+    await database.exec(
+      database.dialect === 'mysql'
+        ? 'CREATE INDEX idx_files_folder ON files (folder_id)'
+        : 'CREATE INDEX IF NOT EXISTS idx_files_folder ON files(folder_id)'
+    );
+  } catch {
+    // MySQL has no IF NOT EXISTS for indexes; a duplicate here is the normal
+    // case on every restart after the first.
   }
 
   // v5: repair files stored before the extension fallback existed. Chrome on

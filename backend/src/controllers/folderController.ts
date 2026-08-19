@@ -130,8 +130,12 @@ export async function deleteFolder(req: AuthenticatedRequest, res: Response) {
       await storage.deleteFile(bucket.id, file.id);
     }
 
-    // Deleting the top folder cascades the rest of the rows in both engines.
-    await db.run('DELETE FROM folders WHERE id = ?', [folder.id]);
+    // Rows are removed explicitly rather than by cascade. A database that
+    // existed before folders arrived never got the files->folders foreign key —
+    // the migration can add a column but not a constraint — so relying on the
+    // cascade there would leave file rows pointing at a folder that is gone.
+    await db.run(`DELETE FROM files WHERE folder_id IN (${placeholders})`, ids);
+    await db.run(`DELETE FROM folders WHERE id IN (${placeholders})`, ids);
 
     res.json({
       message: `Folder '${folder.name}' dihapus.`,
