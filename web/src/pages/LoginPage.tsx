@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { HardDrive } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { PasswordInput } from '../components/ui/PasswordInput';
 import { Spinner } from '../components/ui/Spinner';
 import { Toaster } from '../components/ui/Toaster';
 import type { AuthUser } from '../types';
@@ -68,13 +69,11 @@ export function LoginPage() {
           </div>
           <div className="form-group">
             <label className="form-label" htmlFor="login-password">Password</label>
-            <input
-              className="form-input"
+            <PasswordInput
               id="login-password"
-              type="password"
               placeholder="••••••••••••"
               value={password}
-              onChange={event => setPassword(event.target.value)}
+              onChange={setPassword}
               autoComplete="current-password"
             />
           </div>

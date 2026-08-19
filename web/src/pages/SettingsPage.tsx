@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { KeyRound } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { PasswordInput } from '../components/ui/PasswordInput';
 import { Spinner } from '../components/ui/Spinner';
 import { RoleBadge } from '../components/ui/RoleBadge';
 
@@ -75,26 +76,22 @@ export function SettingsPage() {
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label className="form-label" htmlFor="curr-password">Password Saat Ini</label>
-            <input
-              className="form-input"
+            <PasswordInput
               id="curr-password"
-              type="password"
               placeholder="••••••••••••"
               value={currentPassword}
-              onChange={event => setCurrentPassword(event.target.value)}
+              onChange={setCurrentPassword}
               required
               autoComplete="current-password"
             />
           </div>
           <div className="form-group">
             <label className="form-label" htmlFor="new-password">Password Baru</label>
-            <input
-              className="form-input"
+            <PasswordInput
               id="new-password"
-              type="password"
               placeholder={`Minimal ${MIN_PASSWORD_LENGTH} karakter`}
               value={newPassword}
-              onChange={event => setNewPassword(event.target.value)}
+              onChange={setNewPassword}
               required
               minLength={MIN_PASSWORD_LENGTH}
               autoComplete="new-password"
@@ -102,13 +99,11 @@ export function SettingsPage() {
           </div>
           <div className="form-group">
             <label className="form-label" htmlFor="conf-password">Konfirmasi Password Baru</label>
-            <input
-              className="form-input"
+            <PasswordInput
               id="conf-password"
-              type="password"
               placeholder="Ulangi password baru"
               value={confirmPassword}
-              onChange={event => setConfirmPassword(event.target.value)}
+              onChange={setConfirmPassword}
               required
               minLength={MIN_PASSWORD_LENGTH}
               autoComplete="new-password"

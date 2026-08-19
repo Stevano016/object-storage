@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Modal } from '../ui/Modal';
+import { PasswordInput } from '../ui/PasswordInput';
 import { Spinner } from '../ui/Spinner';
 import type { UserPayload } from '../../hooks/useUsers';
 import type { ManagedUser, UserRole } from '../../types';
@@ -77,13 +78,11 @@ export function UserFormModal({ user, isSelf, onSubmit, onClose }: UserFormModal
         <label className="form-label" htmlFor="user-password">
           {isEditing ? 'Password Baru (opsional)' : 'Password'}
         </label>
-        <input
-          className="form-input"
+        <PasswordInput
           id="user-password"
-          type="password"
           placeholder={isEditing ? 'Kosongkan bila tidak ingin mengubah' : 'Minimal 10 karakter'}
           value={password}
-          onChange={event => setPassword(event.target.value)}
+          onChange={setPassword}
           required={!isEditing}
           minLength={10}
           autoComplete="new-password"
