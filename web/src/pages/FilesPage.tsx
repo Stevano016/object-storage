@@ -36,8 +36,9 @@ export function FilesPage({
     setSearch,
     load,
     uploading,
-    uploadProgress,
-    uploadFile,
+    uploads,
+    uploadFiles,
+    resetUploads,
     deleteFile
   } = useFiles(activeBucket);
 
@@ -50,8 +51,8 @@ export function FilesPage({
     ? ({ kind: 'token', value: token } as const)
     : undefined;
 
-  const handleUpload = (file: File) => {
-    uploadFile(file, () => {
+  const handleUpload = (files: File[]) => {
+    void uploadFiles(files, () => {
       setShowUploadModal(false);
       onStorageChanged();
     });
@@ -172,9 +173,9 @@ export function FilesPage({
         <UploadModal
           bucketName={activeBucket}
           uploading={uploading}
-          progress={uploadProgress}
+          items={uploads}
           onUpload={handleUpload}
-          onClose={() => setShowUploadModal(false)}
+          onClose={() => { setShowUploadModal(false); resetUploads(); }}
         />
       )}
 

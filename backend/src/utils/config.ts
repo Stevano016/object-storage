@@ -48,12 +48,21 @@ export const JWT_SECRET = readJwtSecret();
 /** Shorter than the old 7 days: a leaked token stays useful for less time. */
 export const JWT_EXPIRES_IN = (process.env.JWT_EXPIRES_IN || '24h') as SignOptions['expiresIn'];
 /**
- * Which upstream hops may set X-Forwarded-For. Behind the Apache reverse proxy
- * that is loopback only — trusting more would let a client forge its own IP and
- * walk around the login rate limiter.
+ * Which upstream hops may set X-Forwarded-For.
+ *
+ * 'loopback' alone was wrong here: the app runs in a container, so a request
+ * forwarded by cloudflared or Apache on the host arrives from the Docker bridge
+ * gateway (172.18.0.1), not 127.0.0.1. Express then refused to read the
+ * forwarding headers and every visitor on the Internet was accounted for under
+ * that single address — which meant the login rate limiter could be tripped for
+ * everyone at once by any one of them.
+ *
+ * 'uniquelocal' covers the private ranges a container gateway can occupy. The
+ * container is not itself reachable from the Internet, so the only hosts that
+ * can present these headers are on the machine or the LAN.
  */
 export const TRUST_PROXY: boolean | number | string = (() => {
-  const raw = (process.env.TRUST_PROXY || 'loopback').trim();
+  const raw = (process.env.TRUST_PROXY || 'loopback, uniquelocal').trim();
   if (raw === 'false') return false;
   if (raw === 'true') return true;
   return /^\d+$/.test(raw) ? Number(raw) : raw;

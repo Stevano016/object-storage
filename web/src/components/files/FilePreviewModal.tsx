@@ -1,11 +1,16 @@
-import { Download, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { Download, ImageDown, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Modal } from '../ui/Modal';
 import { FileTypeIcon } from '../ui/FileTypeIcon';
+import { Spinner } from '../ui/Spinner';
 import { useClipboard } from '../../hooks/useClipboard';
 import { useConfirm } from '../../context/ConfirmContext';
+import { useToast } from '../../context/ToastContext';
+import { useHeicPreview } from '../../hooks/useHeicPreview';
 import { getFileKind } from '../../lib/files';
 import { formatBytes, formatDateTime } from '../../lib/format';
+import { heicToJpegBlob, isHeicFile, jpegFilename } from '../../lib/heic';
 import type { FileItem } from '../../types';
 
 export interface PreviewLink {
@@ -28,6 +33,34 @@ interface FilePreviewModalProps {
   /** Extra footer controls, e.g. a "create share link" button. */
   extraActions?: ReactNode;
   onClose: () => void;
+}
+
+function ImageViewer({ file, mediaUrl }: { file: FileItem; mediaUrl: string }) {
+  const { src, decoding, error, isHeic } = useHeicPreview(file, mediaUrl);
+
+  if (decoding) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+        <Spinner size={32} />
+        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+          Membaca foto HEIC…
+        </span>
+      </div>
+    );
+  }
+
+  if (error || !src) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+        <FileTypeIcon mimeType={file.mimeType} />
+        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+          {isHeic ? `Foto HEIC ini tidak bisa dibaca. ${error ?? ''}` : 'Pratinjau gagal dimuat.'}
+        </span>
+      </div>
+    );
+  }
+
+  return <img src={src} alt={file.originalName} />;
 }
 
 function LinkRow({ link }: { link: PreviewLink }) {
@@ -75,6 +108,38 @@ export function FilePreviewModal({
 }: FilePreviewModalProps) {
   const kind = getFileKind(file.mimeType);
   const confirm = useConfirm();
+  const { showToast } = useToast();
+  const [converting, setConverting] = useState(false);
+  const heic = isHeicFile(file.mimeType, file.originalName);
+
+  /**
+   * Saves a HEIC as JPEG.
+   *
+   * Downloading the original is not enough on its own: Windows cannot open a
+   * .heic without the HEIF Image Extensions from the Store, and most photo tools
+   * outside the Apple ecosystem refuse it too. The bytes are decoded here, in
+   * the same place the preview is produced.
+   */
+  const handleDownloadJpeg = async () => {
+    setConverting(true);
+    try {
+      const blob = await heicToJpegBlob(mediaUrl);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = jpegFilename(file.originalName);
+      link.click();
+      // Revoked on the next tick so the browser has started the save.
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      const message = error instanceof Error && error.message
+        ? error.message
+        : 'Gagal mengubah HEIC menjadi JPG.';
+      showToast(message, 'error');
+    } finally {
+      setConverting(false);
+    }
+  };
 
   const handleDelete = async () => {
     if (await confirm({
@@ -113,6 +178,17 @@ export function FilePreviewModal({
             <Download style={{ width: 16, height: 16 }} />
             Unduh
           </a>
+          {heic && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => void handleDownloadJpeg()}
+              disabled={converting}
+              title="Simpan salinan JPG yang bisa dibuka di mana saja"
+            >
+              {converting ? <Spinner size={16} /> : <ImageDown style={{ width: 16, height: 16 }} />}
+              Unduh sebagai JPG
+            </button>
+          )}
           <button className="btn btn-primary" onClick={onClose}>Tutup</button>
         </>
       }
@@ -120,7 +196,7 @@ export function FilePreviewModal({
       <div className="media-preview-container">
         <div className="media-viewer">
           {kind === 'image' ? (
-            <img src={mediaUrl} alt={file.originalName} />
+            <ImageViewer file={file} mediaUrl={mediaUrl} />
           ) : kind === 'video' ? (
             <video controls preload="metadata" playsInline src={mediaUrl} />
           ) : kind === 'audio' ? (

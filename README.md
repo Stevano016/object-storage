@@ -5,6 +5,7 @@ Sistem penyimpanan objek (*Object Storage*) mandiri (self-hosted) yang ringan, b
 ## Fitur Utama
 
 - 📂 **Bucket Management**: Buat, hapus, dan atur visibilitas bucket (Publik atau Privat).
+- 🖼️ **Foto HEIC iPhone**: didekode di peramban agar tetap bisa dipratinjau, plus tombol unduh sebagai JPG untuk perangkat yang tidak mengenal HEIC.
 - 📏 **Kuota per Bucket**: Batasi tiap bucket dalam MB/GB/TB, dengan bilah pemakaian di dasbor dan penolakan unggahan (HTTP 413) saat kuota habis.
 - 📤 **Media Streamer & Range Queries**: Mendukung penuh pemutaran video dan audio langsung di peramban (HTTP 206 Partial Content) tanpa lemot/buffering berlebih.
 - 🛡️ **Security-First Design**:
@@ -187,6 +188,32 @@ curl -X PUT http://localhost:5000/api/buckets/foto-2026   -H "Authorization: Bea
 ```
 
 `PUT /api/buckets/:name` bersifat parsial: kirim `isPublic` saja, `quotaBytes` saja, atau keduanya. Kolom yang tidak dikirim tidak berubah.
+
+## Format Berkas dan Foto HEIC
+
+Unggahan menerima **semua format** — tidak ada penyaring jenis berkas. Yang berbeda hanyalah cara berkas disajikan kembali (lihat *Penyajian berkas* di bagian Keamanan).
+
+### Tipe berkas disimpulkan dari ekstensi
+
+Tipe MIME sebuah unggahan ditentukan oleh perangkat pengirim, dan peramban hanya mengenal ekstensi yang terdaftar di sistem operasinya. Chrome di Windows mengirim `application/octet-stream` untuk `.heic`, `.heif`, `.avif`, `.opus`, `.flac`, `.mkv`, `.m4v`, dan `.3gp` — sementara berkas yang sama dari iPhone datang dengan tipe yang benar. Akibatnya satu foto bisa berperilaku berbeda tergantung diunggah dari mana.
+
+Server sekarang menyimpulkan tipe dari ekstensi **hanya bila** klien mengirim tipe generik atau kosong. Klien yang mengirim tipe sungguhan selalu dipercaya. Berkas yang sudah terlanjur tersimpan sebagai `application/octet-stream` diperbaiki otomatis saat server dijalankan.
+
+### HEIC ditampilkan lewat dekoder di peramban
+
+`.heic` adalah format bawaan foto iPhone, dan **tidak ada peramban selain Safari yang bisa menampilkannya** — seberapa benar pun tipe MIME-nya. Dasbor karena itu mendekodenya sendiri memakai libheif (WebAssembly, pustaka `heic-to`).
+
+- Berkas dekodernya ±3 MB dan **dimuat hanya saat ada HEIC yang dibuka**, jadi tidak membebani pemuatan dasbor biasa.
+- Dekode berjalan **satu per satu** untuk seluruh aplikasi, dan hasilnya di-cache. Membuka galeri berisi banyak HEIC akan mengisi thumbnail satu demi satu, bukan membekukan tab.
+- Hasil dekode diperkecil sebelum disimpan di memori: thumbnail ke sisi terpanjang 480 px, tampilan besar ke 2000 px. Tanpa ini, satu foto 24 MP menyita ±4 MB memori tab.
+- **Dekode itu mahal**: satu foto iPhone 24 MP butuh ±7 detik di peramban. Ini biaya HEVC di WebAssembly, bukan sesuatu yang bisa dihilangkan di sisi klien. Bila nanti terasa mengganggu, jalan keluarnya adalah membuat thumbnail di server saat unggah.
+
+### Tombol "Unduh sebagai JPG"
+
+Mengunduh HEIC apa adanya tidak selalu menolong: Windows tidak bisa membukanya tanpa *HEIF Image Extensions* dari Microsoft Store, dan kebanyakan aplikasi foto di luar ekosistem Apple menolaknya. Pada berkas HEIC, modal pratinjau menyediakan tombol **Unduh sebagai JPG** yang menyimpan salinan resolusi penuh dalam format yang bisa dibuka di mana saja. Tombol **Unduh** biasa tetap memberi berkas HEIC asli, byte per byte tanpa perubahan.
+
+> [!NOTE]
+> Menyajikan berkas tidak pernah mengubah isinya. Yang berubah hanya header HTTP: server memutuskan peramban sebaiknya *menampilkan* atau *menyimpan*. Berkas yang diunduh selalu identik dengan yang diunggah.
 
 ## Keamanan
 

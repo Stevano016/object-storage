@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { checkProxyUploadLimit, uploadWithProgress } from '../lib/upload';
+import { summarize, useUploads } from './useUploads';
 import type { FileItem, Pagination } from '../types';
 
 const PAGE_SIZE = 24;
@@ -20,8 +20,7 @@ export function useFiles(bucketName: string) {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState('');
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const { items: uploads, busy: uploading, start: startUploads, reset: resetUploads } = useUploads();
 
   const load = useCallback(async (targetPage = 1, targetSearch = '') => {
     if (!bucketName) {
@@ -55,38 +54,27 @@ export function useFiles(bucketName: string) {
 
   const reload = useCallback(() => load(page, search), [load, page, search]);
 
-  const uploadFile = useCallback(async (file: File, onComplete?: () => void) => {
+  /**
+   * Uploads a batch. `onAllDone` only fires when every file made it, so a batch
+   * with a failure keeps the dialog open with the reasons still on screen.
+   */
+  const uploadFiles = useCallback(async (files: File[], onAllDone?: () => void) => {
     if (!bucketName) {
       showToast('Pilih bucket terlebih dahulu.', 'error');
       return;
     }
 
-    const limitError = checkProxyUploadLimit(file);
-    if (limitError) {
-      showToast(limitError, 'error');
-      return;
-    }
+    const summary = await startUploads(files, {
+      url: `${apiUrl}/api/buckets/${bucketName}/files`,
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
 
-    setUploading(true);
-    setUploadProgress(0);
+    showToast(summarize(summary), summary.failed > 0 ? 'error' : 'success');
 
-    try {
-      await uploadWithProgress({
-        url: `${apiUrl}/api/buckets/${bucketName}/files`,
-        file,
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        onProgress: setUploadProgress
-      });
-      showToast(`Berkas '${file.name}' berhasil diunggah.`);
-      await load(1, search);
-      onComplete?.();
-    } catch (error) {
-      showToast((error as Error).message, 'error');
-    } finally {
-      setUploading(false);
-      setUploadProgress(null);
-    }
-  }, [bucketName, apiUrl, token, showToast, load, search]);
+    // Reloaded once for the whole batch rather than per file.
+    if (summary.succeeded > 0) await load(1, search);
+    if (summary.failed === 0) onAllDone?.();
+  }, [bucketName, apiUrl, token, showToast, load, search, startUploads]);
 
   const deleteFile = useCallback(async (fileId: string): Promise<boolean> => {
     try {
@@ -110,8 +98,9 @@ export function useFiles(bucketName: string) {
     load,
     reload,
     uploading,
-    uploadProgress,
-    uploadFile,
+    uploads,
+    uploadFiles,
+    resetUploads,
     deleteFile
   };
 }

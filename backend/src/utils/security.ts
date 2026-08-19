@@ -7,6 +7,24 @@ import { Request, Response, NextFunction } from 'express';
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 
 /**
+ * Addresses a forwarding hop can legitimately have: the loopback interface, or
+ * a private range — which is what a Docker bridge gateway uses. Anything else
+ * is a direct client and may not describe itself.
+ */
+function isTrustedHop(address: string): boolean {
+  const plain = address.replace(/^::ffff:/, '');
+  if (LOOPBACK.has(address) || LOOPBACK.has(plain)) return true;
+
+  const octets = plain.split('.').map(Number);
+  if (octets.length !== 4 || octets.some(part => Number.isNaN(part))) return false;
+
+  const [a, b] = octets;
+  return a === 10
+    || (a === 172 && b >= 16 && b <= 31)
+    || (a === 192 && b === 168);
+}
+
+/**
  * The address to hold accountable for a request.
  *
  * Cloudflare puts the visitor's address in CF-Connecting-IP, but that header is
@@ -21,7 +39,7 @@ export function clientIp(req: Request): string {
   const peer = req.socket.remoteAddress || '';
   const forwarded = req.headers['cf-connecting-ip'];
 
-  if (LOOPBACK.has(peer) && typeof forwarded === 'string' && forwarded.trim()) {
+  if (isTrustedHop(peer) && typeof forwarded === 'string' && forwarded.trim()) {
     return forwarded.trim();
   }
 
@@ -143,15 +161,33 @@ export function rateLimit(limiter: RateLimiter, message: string) {
  * Inline styles are used throughout the dashboard components, so style-src has
  * to allow them; scripts stay restricted to the bundle, which is what stops an
  * injected <script> from running.
+ *
+ * 'wasm-unsafe-eval' is the narrow permission WebAssembly needs once any CSP is
+ * present. It is what lets the dashboard decode HEIC photos, which no browser
+ * outside Safari can render on its own. Unlike 'unsafe-eval' it does not allow
+ * evaluating JavaScript from a string, so the protection that matters stays on.
  */
+/**
+ * Cloudflare injects its Web Analytics beacon into HTML it proxies, so the
+ * dashboard's own policy has to permit it or every page load logs a violation.
+ * Turning Web Analytics off in the Cloudflare dashboard removes the need for
+ * these two sources entirely.
+ */
+const CLOUDFLARE_BEACON = 'https://static.cloudflareinsights.com';
+
 const DASHBOARD_CSP = [
   "default-src 'self'",
-  "script-src 'self'",
+  `script-src 'self' 'wasm-unsafe-eval' ${CLOUDFLARE_BEACON}`,
   "style-src 'self' 'unsafe-inline'",
+  // blob: covers the decoded HEIC frames, which are handed to <img> as object URLs.
   "img-src 'self' data: blob:",
   "media-src 'self' blob:",
   "font-src 'self' data:",
-  "connect-src 'self'",
+  `connect-src 'self' ${CLOUDFLARE_BEACON} https://cloudflareinsights.com`,
+  // The HEIC decoder runs libheif in a worker created from a blob URL. Without
+  // this, worker-src falls back to script-src, which has no blob: source, and
+  // the worker is refused — decoding then fails with an opaque event.
+  "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'none'",
   "form-action 'self'",

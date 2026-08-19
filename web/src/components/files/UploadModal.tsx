@@ -1,29 +1,64 @@
-import { useRef } from 'react';
-import { UploadCloud } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { AlertCircle, CheckCircle2, UploadCloud } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Spinner } from '../ui/Spinner';
+import { formatBytes } from '../../lib/format';
+import type { UploadItem } from '../../hooks/useUploads';
 
 interface UploadModalProps {
   bucketName: string;
   uploading: boolean;
-  progress: number | null;
-  onUpload: (file: File) => void;
+  /** Per-file state for the batch; empty before the first drop. */
+  items: UploadItem[];
+  onUpload: (files: File[]) => void;
   onClose: () => void;
 }
 
-export function UploadModal({ bucketName, uploading, progress, onUpload, onClose }: UploadModalProps) {
+function UploadRow({ item }: { item: UploadItem }) {
+  return (
+    <li className="upload-row">
+      <div className="upload-row-head">
+        <span className="upload-row-name" title={item.name}>{item.name}</span>
+        <span className="upload-row-meta">
+          {item.status === 'selesai' && <CheckCircle2 className="upload-row-icon is-done" />}
+          {item.status === 'gagal' && <AlertCircle className="upload-row-icon is-failed" />}
+          {item.status === 'mengunggah' ? `${item.progress}%` : formatBytes(item.size)}
+        </span>
+      </div>
+
+      {/* Only the file being sent gets a bar; the rest would be noise. */}
+      {item.status === 'mengunggah' && (
+        <div className="quota-bar" style={{ maxWidth: 'none', marginTop: '0.3rem' }}>
+          <div className="quota-bar-fill" style={{ width: `${item.progress}%` }} />
+        </div>
+      )}
+
+      {item.status === 'menunggu' && <span className="upload-row-note">Menunggu…</span>}
+      {item.status === 'gagal' && <span className="upload-row-note is-failed">{item.error}</span>}
+    </li>
+  );
+}
+
+export function UploadModal({ bucketName, uploading, items, onUpload, onClose }: UploadModalProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
 
   const handleDrop = (event: React.DragEvent) => {
     event.preventDefault();
-    const [dropped] = Array.from(event.dataTransfer.files);
-    if (dropped) onUpload(dropped);
+    setDragging(false);
+    const dropped = Array.from(event.dataTransfer.files);
+    if (dropped.length > 0) onUpload(dropped);
   };
 
   const handleSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const [selected] = Array.from(event.target.files ?? []);
-    if (selected) onUpload(selected);
+    const selected = Array.from(event.target.files ?? []);
+    if (selected.length > 0) onUpload(selected);
+    // Cleared so picking the same files again still fires a change event.
+    event.target.value = '';
   };
+
+  const done = items.filter(item => item.status === 'selesai').length;
+  const failed = items.filter(item => item.status === 'gagal').length;
 
   return (
     <Modal
@@ -31,37 +66,52 @@ export function UploadModal({ bucketName, uploading, progress, onUpload, onClose
       onClose={onClose}
       footer={
         <button className="btn btn-secondary" onClick={onClose} disabled={uploading}>
-          Tutup
+          {items.length > 0 && !uploading ? 'Selesai' : 'Tutup'}
         </button>
       }
     >
-      {uploading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '2rem' }}>
-          <Spinner size={40} />
-          <span style={{ fontWeight: 500, marginTop: '1rem' }}>Sedang mengunggah berkas...</span>
-          {progress !== null && (
-            <div style={{ width: '100%', marginTop: '1.5rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.25rem' }}>
-                <span>Kemajuan:</span>
-                <span>{progress}%</span>
-              </div>
-              <div className="progress-bar-container">
-                <div className="progress-bar-fill" style={{ width: `${progress}%` }} />
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div
-          className="dropzone"
-          onDragOver={event => event.preventDefault()}
-          onDrop={handleDrop}
-          onClick={() => inputRef.current?.click()}
-        >
-          <input type="file" ref={inputRef} onChange={handleSelect} style={{ display: 'none' }} />
-          <UploadCloud className="dropzone-icon" />
-          <p className="dropzone-text">Klik atau seret berkas Anda ke sini</p>
-          <p className="dropzone-subtext">Mendukung gambar, video, audio, dan dokumen hingga 500MB</p>
+      {/* The dropzone stays available after a batch so more files can be added
+          without reopening the dialog. */}
+      <div
+        className={`dropzone${dragging ? ' is-dragging' : ''}${uploading ? ' is-disabled' : ''}`}
+        onDragOver={event => { event.preventDefault(); if (!uploading) setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={uploading ? event => event.preventDefault() : handleDrop}
+        onClick={() => { if (!uploading) inputRef.current?.click(); }}
+      >
+        <input
+          type="file"
+          ref={inputRef}
+          onChange={handleSelect}
+          multiple
+          style={{ display: 'none' }}
+        />
+        {uploading ? <Spinner size={32} /> : <UploadCloud className="dropzone-icon" />}
+        <p className="dropzone-text">
+          {uploading
+            ? 'Sedang mengunggah…'
+            : dragging
+              ? 'Lepaskan untuk mengunggah'
+              : 'Klik atau seret berkas ke sini'}
+        </p>
+        <p className="dropzone-subtext">
+          Bisa beberapa berkas sekaligus — gambar, video, audio, dokumen, arsip. Maksimal 500 MB per berkas.
+        </p>
+      </div>
+
+      {items.length > 0 && (
+        <div className="upload-list-wrap">
+          <div className="upload-list-head">
+            <span>{items.length} berkas</span>
+            <span>
+              {done > 0 && `${done} selesai`}
+              {done > 0 && failed > 0 && ' · '}
+              {failed > 0 && <span className="is-failed">{failed} gagal</span>}
+            </span>
+          </div>
+          <ul className="upload-list">
+            {items.map(item => <UploadRow key={item.id} item={item} />)}
+          </ul>
         </div>
       )}
     </Modal>

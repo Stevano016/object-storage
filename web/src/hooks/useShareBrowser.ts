@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useToast } from '../context/ToastContext';
 import { resolveApiUrl } from '../lib/apiUrl';
-import { checkProxyUploadLimit, uploadWithProgress } from '../lib/upload';
+import { summarize, useUploads } from './useUploads';
 import type { FileItem, Pagination, ShareInfo } from '../types';
 
 const PAGE_SIZE = 24;
@@ -41,8 +41,7 @@ export function useShareBrowser(token: string) {
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState('');
 
-  const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const { items: uploads, busy: uploading, start: startUploads, reset: resetUploads } = useUploads();
 
   const load = useCallback(async (targetPage = 1, targetSearch = '') => {
     setLoading(true);
@@ -85,32 +84,15 @@ export function useShareBrowser(token: string) {
     return () => { cancelled = true; };
   }, [base, load]);
 
-  const uploadFile = useCallback(async (file: File, onComplete?: () => void) => {
-    const limitError = checkProxyUploadLimit(file);
-    if (limitError) {
-      showToast(limitError, 'error');
-      return;
-    }
+  /** Same batching as the dashboard, minus the session headers a share link has none of. */
+  const uploadFiles = useCallback(async (files: File[], onAllDone?: () => void) => {
+    const summary = await startUploads(files, { url: `${base}/files` });
 
-    setUploading(true);
-    setUploadProgress(0);
+    showToast(summarize(summary), summary.failed > 0 ? 'error' : 'success');
 
-    try {
-      await uploadWithProgress({
-        url: `${base}/files`,
-        file,
-        onProgress: setUploadProgress
-      });
-      showToast(`Berkas '${file.name}' berhasil diunggah.`);
-      await load(1, search);
-      onComplete?.();
-    } catch (error) {
-      showToast((error as Error).message, 'error');
-    } finally {
-      setUploading(false);
-      setUploadProgress(null);
-    }
-  }, [base, showToast, load, search]);
+    if (summary.succeeded > 0) await load(1, search);
+    if (summary.failed === 0) onAllDone?.();
+  }, [base, showToast, load, search, startUploads]);
 
   const deleteFile = useCallback(async (fileId: string): Promise<boolean> => {
     try {
@@ -137,8 +119,9 @@ export function useShareBrowser(token: string) {
     setSearch,
     load,
     uploading,
-    uploadProgress,
-    uploadFile,
+    uploads,
+    uploadFiles,
+    resetUploads,
     deleteFile
   };
 }

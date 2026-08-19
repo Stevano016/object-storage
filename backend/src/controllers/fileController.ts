@@ -8,11 +8,13 @@ import { resolveShareToken } from '../middleware/share.js';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
+import { pipeline } from 'stream';
 
 import { getStorageProvider } from '../utils/storageProvider.js';
 import { MAX_UPLOAD_BYTES, JWT_SECRET } from '../utils/config.js';
 import { assertBucketQuota, QuotaExceededError } from '../utils/quota.js';
 import { contentDisposition, isInlineSafeMimeType, OBJECT_CSP } from '../utils/security.js';
+import { resolveMimeType } from '../utils/mimeTypes.js';
 
 // Define directories
 const dataDir = path.resolve('data');
@@ -122,19 +124,24 @@ export async function storeUploadedFile(
   // Sanitize the display name so it is safe inside a URL path.
   const safeName = encodeURIComponent(file.originalname.replace(/\s+/g, '-'));
 
-  const storagePath = await getStorageProvider().uploadFile(bucketId, fileId, file.path, file.mimetype);
+  // Chrome on Windows has no MIME mapping for .heic/.avif/.opus and friends, so
+  // it sends application/octet-stream. Falling back to the extension keeps a
+  // photo identical whether it came from a phone or a desktop.
+  const mimeType = resolveMimeType(file.mimetype, file.originalname);
+
+  const storagePath = await getStorageProvider().uploadFile(bucketId, fileId, file.path, mimeType);
 
   await db.run(
     `INSERT INTO files (id, bucket_id, name, original_name, mime_type, size, physical_path)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [fileId, bucketId, safeName, file.originalname, file.mimetype, file.size, storagePath]
+    [fileId, bucketId, safeName, file.originalname, mimeType, file.size, storagePath]
   );
 
   return {
     id: fileId,
     name: safeName,
     originalName: file.originalname,
-    mimeType: file.mimetype,
+    mimeType,
     size: file.size,
     createdAt: new Date().toISOString(),
     url: `/s/${bucketName}/${safeName}?id=${fileId}`
@@ -362,7 +369,21 @@ export async function downloadFile(req: Request, res: Response) {
         });
       }
 
-      storageResult.stream.pipe(res);
+      // pipeline(), not pipe(): when the client goes away mid-download — which a
+      // <video> element does on every seek — pipe() leaves the source stream
+      // running. For the S3 provider that stream holds a slot in the SDK's
+      // connection pool, and once enough of them leak the pool is exhausted and
+      // every later download hangs forever without even reaching MinIO.
+      // pipeline() destroys the source as soon as the response ends.
+      pipeline(storageResult.stream, res, error => {
+        if (!error) return;
+        // A client that navigated away is the normal case, not a fault.
+        const aborted = error.message.includes('premature close')
+          || (error as NodeJS.ErrnoException).code === 'ERR_STREAM_PREMATURE_CLOSE';
+        if (!aborted) {
+          console.error('File stream error:', error);
+        }
+      });
     } catch (err) {
       console.error('File stream error:', err);
       res.status(404).json({ error: 'Physical file not found.' });

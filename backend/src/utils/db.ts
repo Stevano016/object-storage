@@ -3,6 +3,7 @@ import fs from 'fs';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { createDatabase } from './database.js';
+import { mimeTypeFromFilename } from './mimeTypes.js';
 import type { SqlDatabase } from './database.js';
 
 export type UserRole = 'superadmin' | 'user';
@@ -171,6 +172,24 @@ async function runMigrations(database: SqlDatabase) {
     const columnType = database.dialect === 'mysql' ? 'DATETIME NULL' : 'DATETIME';
     await database.exec(`ALTER TABLE users ADD COLUMN password_changed_at ${columnType}`);
     console.log('MIGRATION: users.password_changed_at added.');
+  }
+
+  // v5: repair files stored before the extension fallback existed. Chrome on
+  // Windows uploaded .heic/.avif/.opus as application/octet-stream, which left
+  // them with a generic icon and no preview. Cheap to re-run: on an instance
+  // with nothing to fix this is a single indexed-free scan returning no rows.
+  const untyped = await database.all<{ id: string; original_name: string }[]>(
+    `SELECT id, original_name FROM files WHERE mime_type = 'application/octet-stream'`
+  );
+  let repaired = 0;
+  for (const row of untyped) {
+    const guessed = mimeTypeFromFilename(row.original_name);
+    if (!guessed) continue;
+    await database.run('UPDATE files SET mime_type = ? WHERE id = ?', [guessed, row.id]);
+    repaired += 1;
+  }
+  if (repaired > 0) {
+    console.log(`MIGRATION: recovered the MIME type of ${repaired} file(s) from their extension.`);
   }
 
   // Never leave the instance without a superadmin (e.g. after a botched manual edit).

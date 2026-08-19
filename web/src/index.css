@@ -1443,3 +1443,112 @@ p { color: var(--text-secondary); }
   border-color: var(--danger);
   box-shadow: 0 0 0 3px oklch(0.58 0.16 20 / 0.15);
 }
+
+/* ==========================================================================
+   Multi-file upload queue
+   ========================================================================== */
+
+.dropzone.is-dragging {
+  border-color: var(--accent-primary);
+  background-color: var(--accent-bg);
+}
+
+.dropzone.is-disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+
+.upload-list-wrap {
+  margin-top: 1.25rem;
+  border-top: 1px solid var(--border-muted);
+  padding-top: 1rem;
+}
+
+.upload-list-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-bottom: 0.6rem;
+}
+
+.upload-list-head .is-failed {
+  color: var(--danger);
+}
+
+/* Capped so a large batch scrolls inside the dialog instead of pushing the
+   footer buttons off screen. */
+.upload-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.upload-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.upload-row-name {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.upload-row-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.upload-row-icon.is-done {
+  color: var(--success);
+}
+
+.upload-row-icon.is-failed {
+  color: var(--danger);
+}
+
+.upload-row-note {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.upload-row-note.is-failed {
+  color: var(--danger);
+}
+
+/* Placeholder shown while a HEIC thumbnail decodes, or when it cannot. */
+.thumb-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  height: 100%;
+  padding: 0.5rem;
+  text-align: center;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}

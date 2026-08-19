@@ -34,8 +34,9 @@ export function SharePage({ token }: { token: string }) {
     setSearch,
     load,
     uploading,
-    uploadProgress,
-    uploadFile,
+    uploads,
+    uploadFiles,
+    resetUploads,
     deleteFile
   } = useShareBrowser(token);
 
@@ -180,9 +181,9 @@ export function SharePage({ token }: { token: string }) {
         <UploadModal
           bucketName={info.bucketName}
           uploading={uploading}
-          progress={uploadProgress}
-          onUpload={file => void uploadFile(file, () => setShowUploadModal(false))}
-          onClose={() => setShowUploadModal(false)}
+          items={uploads}
+          onUpload={files => void uploadFiles(files, () => setShowUploadModal(false))}
+          onClose={() => { setShowUploadModal(false); resetUploads(); }}
         />
       )}
 
