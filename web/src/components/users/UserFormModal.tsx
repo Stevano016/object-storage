@@ -80,12 +80,16 @@ export function UserFormModal({ user, isSelf, onSubmit, onClose }: UserFormModal
           onChange={event => { setUsername(event.target.value); setErrors(e => ({ ...e, username: null })); }}
           aria-invalid={errors.username ? true : undefined}
           autoComplete="off"
+          disabled={user?.username === 'admin'}
+          style={user?.username === 'admin' ? { cursor: 'not-allowed' } : undefined}
         />
         {errors.username
           ? <FieldError message={errors.username} />
           : (
             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-              3-32 karakter: huruf, angka, titik, garis bawah, atau tanda hubung.
+              {user?.username === 'admin'
+                ? 'Username untuk akun utama "admin" tidak dapat diubah.'
+                : '3-32 karakter: huruf, angka, titik, garis bawah, atau tanda hubung.'}
             </p>
           )}
       </div>
@@ -112,15 +116,19 @@ export function UserFormModal({ user, isSelf, onSubmit, onClose }: UserFormModal
           id="user-role"
           value={role}
           onChange={event => setRole(event.target.value as UserRole)}
-          disabled={isSelf}
-          style={{ cursor: isSelf ? 'not-allowed' : 'pointer' }}
+          disabled={isSelf || user?.username === 'admin'}
+          style={{ cursor: (isSelf || user?.username === 'admin') ? 'not-allowed' : 'pointer' }}
         >
           {ROLE_OPTIONS.map(option => (
             <option key={option.value} value={option.value}>{option.label}</option>
           ))}
         </select>
         <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-          {isSelf ? 'Anda tidak dapat mengubah peran akun Anda sendiri.' : selectedRoleHint}
+          {isSelf
+            ? 'Anda tidak dapat mengubah peran akun Anda sendiri.'
+            : user?.username === 'admin'
+            ? 'Peran untuk akun utama "admin" tidak dapat diubah.'
+            : selectedRoleHint}
         </p>
       </div>
     </Modal>

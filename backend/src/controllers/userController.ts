@@ -149,6 +149,15 @@ export async function updateUser(req: AuthenticatedRequest, res: Response) {
       params.push(role);
     }
 
+    if (target.username === 'admin') {
+      if (username !== undefined && username !== 'admin') {
+        return res.status(400).json({ error: 'Username untuk akun utama "admin" tidak dapat diubah.' });
+      }
+      if (role !== undefined && role !== 'superadmin') {
+        return res.status(400).json({ error: 'Peran untuk akun utama "admin" tidak dapat diubah.' });
+      }
+    }
+
     if (updates.length > 0) {
       params.push(id);
       await db.run(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params);
@@ -171,6 +180,10 @@ export async function deleteUser(req: AuthenticatedRequest, res: Response) {
 
     if (!target) {
       return res.status(404).json({ error: 'User not found.' });
+    }
+
+    if (target.username === 'admin') {
+      return res.status(400).json({ error: 'Akun utama "admin" dilindungi dan tidak dapat dihapus.' });
     }
 
     if (target.id === req.user?.id) {

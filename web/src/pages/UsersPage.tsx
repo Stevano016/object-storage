@@ -124,8 +124,14 @@ export function UsersPage({ onUsersChanged }: UsersPageProps) {
                         <button
                           className="btn btn-danger btn-icon-only"
                           onClick={() => void handleDelete(item)}
-                          title={isSelf ? 'Akun sendiri tidak dapat dihapus' : 'Hapus pengguna'}
-                          disabled={isSelf}
+                          title={
+                            isSelf
+                              ? 'Akun sendiri tidak dapat dihapus'
+                              : item.username === 'admin'
+                              ? 'Akun utama "admin" dilindungi dan tidak dapat dihapus'
+                              : 'Hapus pengguna'
+                          }
+                          disabled={isSelf || item.username === 'admin'}
                         >
                           <Trash2 style={{ width: 16, height: 16 }} />
                         </button>
