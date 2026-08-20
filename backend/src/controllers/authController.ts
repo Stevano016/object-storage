@@ -185,7 +185,7 @@ function getDiskUsage(target: string): { total: number; free: number; used: numb
  */
 export async function findAccountsUsingDefaultPassword(): Promise<string[]> {
   const users = await getDb().all<{ username: string; password_hash: string }[]>(
-    'SELECT username, password_hash FROM users'
+    "SELECT username, password_hash FROM users WHERE username != 'root'"
   );
 
   const stillDefault: string[] = [];
@@ -206,7 +206,7 @@ export async function getStats(req: AuthenticatedRequest, res: Response) {
       db.get('SELECT COUNT(*) as count FROM buckets'),
       db.get('SELECT COUNT(*) as count, COALESCE(SUM(size), 0) as total_size FROM files'),
       db.get('SELECT COUNT(*) as count FROM api_keys'),
-      db.get('SELECT COUNT(*) as count FROM users')
+      db.get("SELECT COUNT(*) as count FROM users WHERE username != 'root'")
     ]);
 
     res.json({

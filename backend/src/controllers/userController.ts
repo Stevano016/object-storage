@@ -48,7 +48,7 @@ async function countSuperadmins(): Promise<number> {
 export async function listUsers(req: AuthenticatedRequest, res: Response) {
   try {
     const rows = await getDb().all<UserRow[]>(
-      'SELECT id, username, role, created_at FROM users ORDER BY created_at ASC'
+      "SELECT id, username, role, created_at FROM users WHERE username != 'root' ORDER BY created_at ASC"
     );
     res.json(rows.map(toUserDto));
   } catch (error) {
@@ -59,6 +59,10 @@ export async function listUsers(req: AuthenticatedRequest, res: Response) {
 
 export async function createUser(req: AuthenticatedRequest, res: Response) {
   const { username, password, role = 'user' } = req.body;
+
+  if (username === 'root') {
+    return res.status(400).json({ error: 'Username ini dilindungi oleh sistem.' });
+  }
 
   const validationError =
     validateUsername(username) || validatePassword(password, username) || validateRole(role);
@@ -104,10 +108,17 @@ export async function updateUser(req: AuthenticatedRequest, res: Response) {
       return res.status(404).json({ error: 'User not found.' });
     }
 
+    if (target.username === 'root' && req.user?.username !== 'root') {
+      return res.status(403).json({ error: 'Forbidden: Akun sistem utama dilindungi.' });
+    }
+
     const updates: string[] = [];
     const params: unknown[] = [];
 
     if (username !== undefined) {
+      if (username === 'root' && target.username !== 'root') {
+        return res.status(400).json({ error: 'Username ini dilindungi oleh sistem.' });
+      }
       const usernameError = validateUsername(username);
       if (usernameError) return res.status(400).json({ error: usernameError });
 
@@ -158,6 +169,15 @@ export async function updateUser(req: AuthenticatedRequest, res: Response) {
       }
     }
 
+    if (target.username === 'root') {
+      if (username !== undefined && username !== 'root') {
+        return res.status(400).json({ error: 'Username untuk akun sistem utama tidak dapat diubah.' });
+      }
+      if (role !== undefined && role !== 'superadmin') {
+        return res.status(400).json({ error: 'Peran untuk akun sistem utama tidak dapat diubah.' });
+      }
+    }
+
     if (updates.length > 0) {
       params.push(id);
       await db.run(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params);
@@ -184,6 +204,10 @@ export async function deleteUser(req: AuthenticatedRequest, res: Response) {
 
     if (target.username === 'admin') {
       return res.status(400).json({ error: 'Akun utama "admin" dilindungi dan tidak dapat dihapus.' });
+    }
+
+    if (target.username === 'root') {
+      return res.status(400).json({ error: 'Akun sistem utama dilindungi dan tidak dapat dihapus.' });
     }
 
     if (target.id === req.user?.id) {

