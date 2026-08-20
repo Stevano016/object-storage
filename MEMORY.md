@@ -47,6 +47,7 @@ Seluruh komponen dasar Object Storage (**Gentan Storage**) untuk VPS Server Gent
 7. **Penyempurnaan Tautan Berbagi Publik & Unggah Seluler**:
    - Menambahkan navigasi dan pembuatan folder di dalam tautan berbagi publik (`shareController.ts`, `SharePage.tsx`, `useShareBrowser.ts`).
    - Menyempurnakan elemen input file pada `UploadModal.tsx` agar tidak menggunakan `display: none`, melainkan memposisikannya secara transparan di dalam layout. Hal ini menyelesaikan batasan pada iOS Safari/Chrome Seluler sehingga pengguna dapat memilih dan mengunggah banyak berkas secara bersamaan.
+   - Menambahkan tingkat izin akses baru `uploader` ("Lihat & Unggah") pada dasbor admin dan tautan berbagi publik. Pengguna dengan tautan ini dapat melihat dan mengunggah file tetapi tidak dapat menghapus file maupun membuat/mengelola folder.
 
 ## Kredensial Default (Inisialisasi)
 - **Username**: `admin`
