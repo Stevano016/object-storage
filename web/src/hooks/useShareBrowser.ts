@@ -100,7 +100,8 @@ export function useShareBrowser(token: string) {
 
     void init();
     return () => { cancelled = true; };
-  }, [base, load]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [base]);
 
   const openFolder = useCallback((targetFolderId: string | null) => {
     setSearch('');
