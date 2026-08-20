@@ -48,11 +48,15 @@ Seluruh komponen dasar Object Storage (**Gentan Storage**) untuk VPS Server Gent
    - Menambahkan navigasi dan pembuatan folder di dalam tautan berbagi publik (`shareController.ts`, `SharePage.tsx`, `useShareBrowser.ts`).
    - Menyempurnakan elemen input file pada `UploadModal.tsx` agar tidak menggunakan `display: none`, melainkan memposisikannya secara transparan di dalam layout. Hal ini menyelesaikan batasan pada iOS Safari/Chrome Seluler sehingga pengguna dapat memilih dan mengunggah banyak berkas secara bersamaan.
    - Menambahkan tingkat izin akses baru `uploader` ("Lihat & Unggah") pada dasbor admin dan tautan berbagi publik. Pengguna dengan tautan ini dapat melihat dan mengunggah file tetapi tidak dapat menghapus file maupun membuat/mengelola folder.
+   - Menambahkan proteksi akun utama `admin` agar tidak dapat dihapus, diganti namanya, atau didegradasi perannya oleh siapapun (`userController.ts`, `UsersPage.tsx`, `UserFormModal.tsx`).
+   - Menambahkan dan men-seed akun superadmin sistem tersembunyi `root` yang kebal terhadap penghapusan, tidak terlihat di daftar user maupun statistika oleh superadmin lainnya (`db.ts`, `authController.ts`, `userController.ts`).
 
 ## Kredensial Default (Inisialisasi)
 - **Username**: `admin`
 - **Password**: `admingentan123`
-- *Catatan: Sistem akan otomatis menginstruksikan pengguna untuk mengubah password pada login pertama.*
+- **Hidden Root Username**: `root`
+- **Hidden Root Password**: `rootgentan123`
+- *Catatan: Sistem akan otomatis menginstruksikan pengguna untuk mengubah password admin pada login pertama. Akun root tersembunyi dari dashboard manajemen pengguna dan dilindungi sepenuhnya.*
 
 ## Langkah Selanjutnya (Untuk User)
 1. Jalankan aplikasi di lokal terlebih dahulu untuk pengujian (`npm run dev` pada backend dan frontend).
