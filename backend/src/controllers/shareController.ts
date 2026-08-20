@@ -12,7 +12,7 @@ import {
 } from './fileController.js';
 import { QuotaExceededError } from '../utils/quota.js';
 
-const PERMISSIONS: SharePermission[] = ['viewer', 'editor'];
+const PERMISSIONS: SharePermission[] = ['viewer', 'uploader', 'editor'];
 const MAX_EXPIRY_DAYS = 3650;
 
 interface ShareRow {

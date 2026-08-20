@@ -9,7 +9,7 @@ import type { SqlDatabase } from './database.js';
 export type UserRole = 'superadmin' | 'user';
 
 /** What an anonymous visitor holding a share link may do. */
-export type SharePermission = 'viewer' | 'editor';
+export type SharePermission = 'viewer' | 'uploader' | 'editor';
 
 export const BCRYPT_ROUNDS = 10;
 

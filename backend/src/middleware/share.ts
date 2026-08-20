@@ -79,6 +79,15 @@ export function requireShareEditor(req: ShareRequest, res: Response, next: NextF
   next();
 }
 
+/** Upload is limited to uploader and editor links. */
+export function requireShareUploaderOrEditor(req: ShareRequest, res: Response, next: NextFunction) {
+  const perm = req.share?.permission;
+  if (perm !== 'editor' && perm !== 'uploader') {
+    return res.status(403).json({ error: 'Tautan ini tidak memiliki izin untuk mengunggah.' });
+  }
+  next();
+}
+
 /** A file-scoped link may never reach into the rest of the bucket. */
 export function assertShareCoversFile(share: ResolvedShare, fileId: string): boolean {
   return !share.fileId || share.fileId === fileId;

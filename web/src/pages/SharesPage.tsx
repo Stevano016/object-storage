@@ -78,8 +78,8 @@ export function SharesPage({ buckets }: SharesPageProps) {
     const target = share.label || share.bucketName;
     const confirmed = await confirm({
       title: `Cabut tautan '${target}'?`,
-      message: share.permission === 'editor'
-        ? 'Tautan ini bisa mengunggah dan menghapus berkas. Mencabutnya menutup akses itu seketika, '
+      message: share.permission !== 'viewer'
+        ? 'Tautan ini bisa mengunggah berkas. Mencabutnya menutup akses itu seketika, '
           + 'tapi berkas yang sudah diunggah lewat tautan ini tetap ada di bucket.'
         : 'Siapa pun yang sudah menyimpan tautan ini langsung kehilangan akses. Tautan tidak bisa dipulihkan.',
       confirmLabel: 'Cabut Tautan',
@@ -129,7 +129,8 @@ export function SharesPage({ buckets }: SharesPageProps) {
                 style={{ cursor: 'pointer' }}
               >
                 <option value="viewer">Hanya lihat &amp; unduh</option>
-                <option value="editor">Bisa unggah &amp; hapus</option>
+                <option value="uploader">Lihat &amp; Unggah (tidak bisa hapus/buat folder)</option>
+                <option value="editor">Bisa unggah &amp; hapus (penuh)</option>
               </select>
             </div>
 
@@ -247,6 +248,7 @@ export function SharesPage({ buckets }: SharesPageProps) {
                         title="Ubah izin tautan"
                       >
                         <option value="viewer">Lihat &amp; Unduh</option>
+                        <option value="uploader">Lihat &amp; Unggah</option>
                         <option value="editor">Unggah &amp; Hapus</option>
                       </select>
                     </td>

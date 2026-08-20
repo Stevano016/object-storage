@@ -87,7 +87,7 @@ export interface Pagination {
   pages: number;
 }
 
-export type SharePermission = 'viewer' | 'editor';
+export type SharePermission = 'viewer' | 'uploader' | 'editor';
 
 export interface ShareLink {
   id: string;

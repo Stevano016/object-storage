@@ -29,7 +29,7 @@ import {
   listAllFolders
 } from './controllers/folderController.js';
 import { listUsers, createUser, updateUser, deleteUser } from './controllers/userController.js';
-import { resolveShare, requireShareEditor } from './middleware/share.js';
+import { resolveShare, requireShareEditor, requireShareUploaderOrEditor } from './middleware/share.js';
 import {
   listShares,
   createShare,
@@ -122,7 +122,7 @@ app.delete('/api/shares/:id', authenticateJWT, requireSuperAdmin, deleteShare);
 // The token in the URL is the whole credential — no session required.
 app.get('/api/share/:token', shareLimit, resolveShare, getSharedInfo);
 app.get('/api/share/:token/files', shareLimit, resolveShare, listSharedFiles);
-app.post('/api/share/:token/files', shareLimit, resolveShare, requireShareEditor, upload.single('file'), uploadSharedFile);
+app.post('/api/share/:token/files', shareLimit, resolveShare, requireShareUploaderOrEditor, upload.single('file'), uploadSharedFile);
 app.delete('/api/share/:token/files/:fileId', shareLimit, resolveShare, requireShareEditor, deleteSharedFile);
 app.post('/api/share/:token/folders', shareLimit, resolveShare, requireShareEditor, createSharedFolder);
 app.put('/api/share/:token/folders/:folderId', shareLimit, resolveShare, requireShareEditor, renameSharedFolder);

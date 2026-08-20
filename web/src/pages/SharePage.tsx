@@ -74,7 +74,9 @@ export function SharePage({ token }: { token: string }) {
     );
   }
 
-  const canEdit = info.permission === 'editor';
+  const canUpload = info.permission === 'editor' || info.permission === 'uploader';
+  const canDelete = info.permission === 'editor';
+  const canManageFolders = info.permission === 'editor';
   const credential = { kind: 'share', value: token } as const;
 
   const handleDelete = async (fileId: string) => {
@@ -126,23 +128,29 @@ export function SharePage({ token }: { token: string }) {
           </div>
         </div>
 
-        <span className={`badge ${canEdit ? 'badge-private' : 'badge-public'}`}>
-          {canEdit
-            ? <><Pencil style={{ width: 12, height: 12 }} />Bisa Unggah &amp; Hapus</>
-            : <><Eye style={{ width: 12, height: 12 }} />Hanya Lihat &amp; Unduh</>}
+        <span className={`badge ${canUpload ? 'badge-private' : 'badge-public'}`}>
+          {info.permission === 'editor' && (
+            <><Pencil style={{ width: 12, height: 12 }} />Bisa Unggah &amp; Hapus</>
+          )}
+          {info.permission === 'uploader' && (
+            <><UploadCloud style={{ width: 12, height: 12 }} />Bisa Unggah</>
+          )}
+          {info.permission === 'viewer' && (
+            <><Eye style={{ width: 12, height: 12 }} />Hanya Lihat &amp; Unduh</>
+          )}
         </span>
       </header>
 
       <div className="page-body">
         <div className="explorer-header">
           <div className="explorer-controls">
-            {canEdit && (
+            {canUpload && (
               <>
                 <button className="btn btn-primary" onClick={() => setShowUploadModal(true)}>
                   <UploadCloud style={{ width: 18, height: 18 }} />
                   Unggah File
                 </button>
-                {info.scope === 'bucket' && (
+                {canManageFolders && info.scope === 'bucket' && (
                   <button className="btn btn-secondary" onClick={() => setShowCreateFolder(true)}>
                     <FolderPlus style={{ width: 18, height: 18 }} />
                     Buat Folder
@@ -190,11 +198,11 @@ export function SharePage({ token }: { token: string }) {
             description={
               path.length > 0
                 ? `Belum ada apa pun di dalam folder '${path[path.length - 1].name}'.`
-                : canEdit
+                : canUpload
                   ? 'Unggah berkas pertama melalui tombol di atas.'
                   : 'Pemilik tautan belum mengunggah berkas apa pun.'
             }
-            action={canEdit ? (
+            action={canUpload ? (
               <button className="btn btn-primary" onClick={() => setShowUploadModal(true)}>
                 Unggah File Pertama
               </button>
@@ -209,8 +217,8 @@ export function SharePage({ token }: { token: string }) {
                     key={folder.id}
                     folder={folder}
                     onOpen={item => openFolder(item.id)}
-                    onRename={canEdit ? setRenamingFolder : undefined}
-                    onDelete={canEdit ? item => void handleDeleteFolder(item) : undefined}
+                    onRename={canManageFolders ? setRenamingFolder : undefined}
+                    onDelete={canManageFolders ? item => void handleDeleteFolder(item) : undefined}
                   />
                 ))}
               </div>
@@ -288,7 +296,7 @@ export function SharePage({ token }: { token: string }) {
             credential,
             download: true
           })}
-          onDelete={canEdit ? () => void handleDelete(selectedFile.id) : undefined}
+          onDelete={canDelete ? () => void handleDelete(selectedFile.id) : undefined}
           onClose={() => setSelectedFile(null)}
         />
       )}
