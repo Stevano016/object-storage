@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, Eye, File as FileIcon, Pencil, Search, UploadCloud, FolderPlus } from 'lucide-react';
+import { AlertTriangle, Eye, File as FileIcon, HardDrive, Pencil, Search, UploadCloud, FolderPlus } from 'lucide-react';
 import { FileCard } from '../components/files/FileCard';
 import { FilePreviewModal } from '../components/files/FilePreviewModal';
 import { UploadModal } from '../components/files/UploadModal';
@@ -116,7 +116,7 @@ export function SharePage({ token }: { token: string }) {
     <ShareShell>
       <header className="header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
-          <img src="/logo.png" alt="Logo" style={{ width: 22, height: 22, objectFit: 'contain', flexShrink: 0 }} />
+          <HardDrive style={{ width: 22, height: 22, color: 'var(--accent-primary)', flexShrink: 0 }} />
           <div style={{ minWidth: 0 }}>
             <h2 style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {info.label || info.bucketName}

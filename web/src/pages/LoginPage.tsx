@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { HardDrive } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { FieldError } from '../components/ui/FieldError';
@@ -56,7 +57,7 @@ export function LoginPage() {
     <div className="login-page">
       <div className="login-card">
         <div className="login-brand">
-          <img src="/logo.png" alt="Logo" style={{ width: 48, height: 48, objectFit: 'contain', marginBottom: '0.5rem' }} />
+          <HardDrive />
           <h1>Gentan Storage</h1>
           <p>Self-Hosted Secure Object Storage Server</p>
         </div>

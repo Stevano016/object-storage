@@ -1,4 +1,4 @@
-import { LogOut, Shield, User, X } from 'lucide-react';
+import { HardDrive, LogOut, Shield, User, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useConfirm } from '../../context/ConfirmContext';
 import { getVisibleNavItems } from '../../lib/navigation';
@@ -34,7 +34,7 @@ export function Sidebar({ activeTab, onTabChange, open, onClose }: SidebarProps)
     <aside className={`sidebar${open ? ' open' : ''}`}>
       <div className="brand" style={{ justifyContent: 'space-between' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <img src="/logo.png" alt="Logo" style={{ width: 24, height: 24, objectFit: 'contain' }} />
+          <HardDrive style={{ width: 24, height: 24 }} />
           Gentan Storage
         </span>
         <button
