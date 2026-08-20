@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useToast } from '../context/ToastContext';
 import { resolveApiUrl } from '../lib/apiUrl';
 import { summarize, useUploads } from './useUploads';
-import type { FileItem, Pagination, ShareInfo } from '../types';
+import type { FileItem, FolderCrumb, FolderItem, Pagination, ShareInfo } from '../types';
 
 const PAGE_SIZE = 24;
 
 interface FileListResponse {
   files: FileItem[];
+  folders: FolderItem[];
+  path: FolderCrumb[];
   pagination: Pagination;
 }
 
@@ -36,6 +38,9 @@ export function useShareBrowser(token: string) {
   const [initializing, setInitializing] = useState(true);
 
   const [files, setFiles] = useState<FileItem[]>([]);
+  const [folders, setFolders] = useState<FolderItem[]>([]);
+  const [path, setPath] = useState<FolderCrumb[]>([]);
+  const [folderId, setFolderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -43,7 +48,11 @@ export function useShareBrowser(token: string) {
 
   const { items: uploads, busy: uploading, start: startUploads, reset: resetUploads } = useUploads();
 
-  const load = useCallback(async (targetPage = 1, targetSearch = '') => {
+  const load = useCallback(async (
+    targetPage = 1,
+    targetSearch = '',
+    targetFolderId: string | null = folderId
+  ) => {
     setLoading(true);
     try {
       const query = new URLSearchParams({
@@ -51,16 +60,25 @@ export function useShareBrowser(token: string) {
         limit: String(PAGE_SIZE),
         search: targetSearch
       });
+      if (targetFolderId) query.set('folderId', targetFolderId);
+
       const data = await shareFetch<FileListResponse>(`${base}/files?${query}`);
       setFiles(data.files);
+      setFolders(data.folders ?? []);
+      setPath(data.path ?? []);
+      setFolderId(targetFolderId);
       setPage(data.pagination.page);
       setTotalPages(data.pagination.pages);
     } catch (error) {
       showToast((error as Error).message, 'error');
+      if (targetFolderId) {
+        setFolderId(null);
+        setPath([]);
+      }
     } finally {
       setLoading(false);
     }
-  }, [base, showToast]);
+  }, [base, showToast, folderId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,7 +90,7 @@ export function useShareBrowser(token: string) {
         if (cancelled) return;
         setInfo(data);
         setInvalidReason(null);
-        await load(1, '');
+        await load(1, '', null);
       } catch (error) {
         if (!cancelled) setInvalidReason((error as Error).message);
       } finally {
@@ -84,27 +102,86 @@ export function useShareBrowser(token: string) {
     return () => { cancelled = true; };
   }, [base, load]);
 
+  const openFolder = useCallback((targetFolderId: string | null) => {
+    setSearch('');
+    void load(1, '', targetFolderId);
+  }, [load]);
+
   /** Same batching as the dashboard, minus the session headers a share link has none of. */
   const uploadFiles = useCallback(async (files: File[], onAllDone?: () => void) => {
-    const summary = await startUploads(files, { url: `${base}/files` });
+    const summary = await startUploads(files, {
+      url: `${base}/files`,
+      fields: folderId ? { folderId } : {}
+    });
 
     showToast(summarize(summary), summary.failed > 0 ? 'error' : 'success');
 
-    if (summary.succeeded > 0) await load(1, search);
+    if (summary.succeeded > 0) await load(1, search, folderId);
     if (summary.failed === 0) onAllDone?.();
-  }, [base, showToast, load, search, startUploads]);
+  }, [base, showToast, load, search, startUploads, folderId]);
 
   const deleteFile = useCallback(async (fileId: string): Promise<boolean> => {
     try {
       await shareFetch(`${base}/files/${fileId}`, { method: 'DELETE' });
       showToast('Berkas berhasil dihapus.');
-      await load(page, search);
+      await load(page, search, folderId);
       return true;
     } catch (error) {
       showToast((error as Error).message, 'error');
       return false;
     }
-  }, [base, showToast, load, page, search]);
+  }, [base, showToast, load, page, search, folderId]);
+
+  const createFolder = useCallback(async (name: string): Promise<boolean> => {
+    try {
+      await shareFetch(`${base}/folders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, parentId: folderId })
+      });
+      showToast(`Folder '${name}' dibuat.`);
+      await load(1, '', folderId);
+      return true;
+    } catch (error) {
+      showToast((error as Error).message, 'error');
+      return false;
+    }
+  }, [base, folderId, showToast, load]);
+
+  const renameFolder = useCallback(async (folder: FolderItem, name: string): Promise<boolean> => {
+    try {
+      await shareFetch(`${base}/folders/${folder.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      showToast('Nama folder diperbarui.');
+      await load(page, search, folderId);
+      return true;
+    } catch (error) {
+      showToast((error as Error).message, 'error');
+      return false;
+    }
+  }, [base, folderId, page, search, showToast, load]);
+
+  const deleteFolder = useCallback(async (folder: FolderItem): Promise<boolean> => {
+    try {
+      const result = await shareFetch<{ deletedFiles: number; deletedFolders: number }>(
+        `${base}/folders/${folder.id}`,
+        { method: 'DELETE' }
+      );
+      showToast(
+        result.deletedFiles > 0
+          ? `Folder '${folder.name}' dan ${result.deletedFiles} berkas di dalamnya dihapus.`
+          : `Folder '${folder.name}' dihapus.`
+      );
+      await load(1, '', folderId);
+      return true;
+    } catch (error) {
+      showToast((error as Error).message, 'error');
+      return false;
+    }
+  }, [base, folderId, showToast, load]);
 
   return {
     apiUrl,
@@ -112,6 +189,13 @@ export function useShareBrowser(token: string) {
     invalidReason,
     initializing,
     files,
+    folders,
+    path,
+    folderId,
+    openFolder,
+    createFolder,
+    renameFolder,
+    deleteFolder,
     loading,
     page,
     totalPages,

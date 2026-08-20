@@ -182,6 +182,17 @@ export async function deleteShare(req: AuthenticatedRequest, res: Response) {
 // Public endpoints — no login, the token in the URL is the only credential
 // ---------------------------------------------------------------------------
 
+import {
+  validateFolderName,
+  findFolder,
+  nameTaken,
+  resolveTargetFolder,
+  listChildFolders,
+  folderPath,
+  folderAndDescendants
+} from '../utils/folders.js';
+import { getStorageProvider } from '../utils/storageProvider.js';
+
 export function getSharedInfo(req: ShareRequest, res: Response) {
   const share = req.share!;
 
@@ -198,17 +209,39 @@ export async function listSharedFiles(req: ShareRequest, res: Response) {
   const share = req.share!;
 
   try {
-    res.json(await listBucketFiles(share.bucketId, {
+    if (share.fileId) {
+      const listing = await listBucketFiles(share.bucketId, {
+        page: parseInt(req.query.page as string) || 1,
+        limit: parseInt(req.query.limit as string) || 24,
+        search: (req.query.search as string) || '',
+        fileId: share.fileId,
+        flat: true
+      });
+      return res.json({
+        ...listing,
+        folders: [],
+        path: []
+      });
+    }
+
+    const folder = await resolveTargetFolder(req.query.folderId, share.bucketId);
+
+    const listing = await listBucketFiles(share.bucketId, {
       page: parseInt(req.query.page as string) || 1,
       limit: parseInt(req.query.limit as string) || 24,
       search: (req.query.search as string) || '',
-      fileId: share.fileId,
-      // Flat on purpose: a link handed out before folders existed showed every
-      // file in the bucket, and it still does. Folder navigation on a public
-      // page would also leak the folder names of a bucket-wide link.
-      flat: true
-    }));
+      folderId: folder?.id ?? null
+    });
+
+    res.json({
+      ...listing,
+      folders: await listChildFolders(share.bucketId, folder?.id ?? null),
+      path: await folderPath(folder?.id ?? null, share.bucketId)
+    });
   } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Folder ')) {
+      return res.status(400).json({ error: error.message });
+    }
     console.error('List shared files error:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
@@ -229,13 +262,18 @@ export async function uploadSharedFile(req: ShareRequest, res: Response) {
   }
 
   try {
-    const stored = await storeUploadedFile(share.bucketId, share.bucketName, file);
+    const folder = await resolveTargetFolder(req.body?.folderId ?? req.query.folderId, share.bucketId);
+
+    const stored = await storeUploadedFile(share.bucketId, share.bucketName, file, folder?.id ?? null);
     res.status(201).json({ ...stored, message: 'Berkas berhasil diunggah.' });
   } catch (error) {
     discardTempUpload(file);
 
     if (error instanceof QuotaExceededError) {
       return res.status(413).json({ error: error.detail });
+    }
+    if (error instanceof Error && error.message.startsWith('Folder ')) {
+      return res.status(400).json({ error: error.message });
     }
 
     console.error('Shared upload error:', error);
@@ -260,6 +298,112 @@ export async function deleteSharedFile(req: ShareRequest, res: Response) {
     res.json({ message: 'Berkas berhasil dihapus.' });
   } catch (error) {
     console.error('Shared delete error:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+}
+
+export async function createSharedFolder(req: ShareRequest, res: Response) {
+  const share = req.share!;
+  const { name, parentId } = req.body;
+
+  const nameError = validateFolderName(name);
+  if (nameError) {
+    return res.status(400).json({ error: nameError });
+  }
+
+  try {
+    const parent = await resolveTargetFolder(parentId, share.bucketId);
+    const trimmed = (name as string).trim();
+
+    if (await nameTaken(share.bucketId, parent?.id ?? null, trimmed)) {
+      return res.status(409).json({ error: `Sudah ada folder bernama '${trimmed}' di sini.` });
+    }
+
+    const id = uuidv4();
+    await getDb().run(
+      'INSERT INTO folders (id, bucket_id, parent_id, name) VALUES (?, ?, ?, ?)',
+      [id, share.bucketId, parent?.id ?? null, trimmed]
+    );
+
+    res.status(201).json({
+      id,
+      name: trimmed,
+      parentId: parent?.id ?? null,
+      fileCount: 0,
+      subfolderCount: 0,
+      message: `Folder '${trimmed}' dibuat.`
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Folder ')) {
+      return res.status(400).json({ error: error.message });
+    }
+    console.error('Create shared folder error:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+}
+
+export async function renameSharedFolder(req: ShareRequest, res: Response) {
+  const share = req.share!;
+  const { folderId } = req.params;
+  const { name } = req.body;
+
+  const nameError = validateFolderName(name);
+  if (nameError) {
+    return res.status(400).json({ error: nameError });
+  }
+
+  try {
+    const folder = await findFolder(folderId, share.bucketId);
+    if (!folder) {
+      return res.status(404).json({ error: 'Folder tidak ditemukan.' });
+    }
+
+    const trimmed = (name as string).trim();
+    if (await nameTaken(share.bucketId, folder.parent_id, trimmed, folder.id)) {
+      return res.status(409).json({ error: `Sudah ada folder bernama '${trimmed}' di sini.` });
+    }
+
+    await getDb().run('UPDATE folders SET name = ? WHERE id = ?', [trimmed, folder.id]);
+    res.json({ id: folder.id, name: trimmed, message: 'Nama folder diperbarui.' });
+  } catch (error) {
+    console.error('Rename shared folder error:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+}
+
+export async function deleteSharedFolder(req: ShareRequest, res: Response) {
+  const share = req.share!;
+  const { folderId } = req.params;
+
+  try {
+    const db = getDb();
+    const folder = await findFolder(folderId, share.bucketId);
+    if (!folder) {
+      return res.status(404).json({ error: 'Folder tidak ditemukan.' });
+    }
+
+    const ids = await folderAndDescendants(folder.id, share.bucketId);
+    const placeholders = ids.map(() => '?').join(', ');
+    const files = await db.all<{ id: string }[]>(
+      `SELECT id FROM files WHERE folder_id IN (${placeholders})`,
+      ids
+    );
+
+    const storage = getStorageProvider();
+    for (const file of files) {
+      await storage.deleteFile(share.bucketId, file.id);
+    }
+
+    await db.run(`DELETE FROM files WHERE folder_id IN (${placeholders})`, ids);
+    await db.run(`DELETE FROM folders WHERE id IN (${placeholders})`, ids);
+
+    res.json({
+      message: `Folder '${folder.name}' dihapus.`,
+      deletedFolders: ids.length,
+      deletedFiles: files.length
+    });
+  } catch (error) {
+    console.error('Delete shared folder error:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 }

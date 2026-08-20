@@ -38,7 +38,10 @@ import {
   getSharedInfo,
   listSharedFiles,
   uploadSharedFile,
-  deleteSharedFile
+  deleteSharedFile,
+  createSharedFolder,
+  renameSharedFolder,
+  deleteSharedFolder
 } from './controllers/shareController.js';
 
 const app = express();
@@ -121,6 +124,9 @@ app.get('/api/share/:token', shareLimit, resolveShare, getSharedInfo);
 app.get('/api/share/:token/files', shareLimit, resolveShare, listSharedFiles);
 app.post('/api/share/:token/files', shareLimit, resolveShare, requireShareEditor, upload.single('file'), uploadSharedFile);
 app.delete('/api/share/:token/files/:fileId', shareLimit, resolveShare, requireShareEditor, deleteSharedFile);
+app.post('/api/share/:token/folders', shareLimit, resolveShare, requireShareEditor, createSharedFolder);
+app.put('/api/share/:token/folders/:folderId', shareLimit, resolveShare, requireShareEditor, renameSharedFolder);
+app.delete('/api/share/:token/folders/:folderId', shareLimit, resolveShare, requireShareEditor, deleteSharedFolder);
 
 // Public/private storage router (outside /api for cleaner URLs).
 // downloadFile authorizes internally so HTML5 media players can stream directly.

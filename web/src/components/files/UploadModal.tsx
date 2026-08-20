@@ -84,7 +84,17 @@ export function UploadModal({ bucketName, uploading, items, onUpload, onClose }:
           ref={inputRef}
           onChange={handleSelect}
           multiple
-          style={{ display: 'none' }}
+          style={{
+            position: 'absolute',
+            width: '1px',
+            height: '1px',
+            padding: 0,
+            margin: '-1px',
+            overflow: 'hidden',
+            clip: 'rect(0, 0, 0, 0)',
+            border: 0,
+            opacity: 0
+          }}
         />
         {uploading ? <Spinner size={32} /> : <UploadCloud className="dropzone-icon" />}
         <p className="dropzone-text">

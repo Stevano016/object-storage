@@ -1,7 +1,7 @@
 # Project Memory - Gentan Storage
 
 ## Status Terakhir
-Seluruh komponen dasar Object Storage (**Gentan Storage**) untuk VPS Server Gentan telah selesai dikembangkan, divalidasi, dan diuji kompilasinya baik untuk sisi backend maupun frontend. 
+Seluruh komponen dasar Object Storage (**Gentan Storage**) untuk VPS Server Gentan telah selesai dikembangkan, divalidasi, dan diuji kompilasinya baik untuk sisi backend maupun frontend. Dukungan folder pada tautan berbagi publik (dengan opsi editor) dan perbaikan unggah banyak file sekaligus dari perangkat seluler telah diimplementasikan dan diverifikasi berjalan dengan baik.
 
 ## Catatan Environment & Teknologi
 - **Workspace**: `D:\Coding\Object Storage`
@@ -44,6 +44,9 @@ Seluruh komponen dasar Object Storage (**Gentan Storage**) untuk VPS Server Gent
    - Mengintegrasikan AWS S3 SDK pada `bucketController.ts` dan `fileController.ts` agar mendukung unggah, hapus, dan stream data privat langsung ke server MinIO.
    - Membuat file `docker-compose.yml` untuk mempermudah pemasangan dan hosting mandiri (*self-host*) kontainer MinIO di VPS Server Gentan.
    - Mengunggah revisi kode integrasi MinIO ini ke GitHub pada commit kedua.
+7. **Penyempurnaan Tautan Berbagi Publik & Unggah Seluler**:
+   - Menambahkan navigasi dan pembuatan folder di dalam tautan berbagi publik (`shareController.ts`, `SharePage.tsx`, `useShareBrowser.ts`).
+   - Menyempurnakan elemen input file pada `UploadModal.tsx` agar tidak menggunakan `display: none`, melainkan memposisikannya secara transparan di dalam layout. Hal ini menyelesaikan batasan pada iOS Safari/Chrome Seluler sehingga pengguna dapat memilih dan mengunggah banyak berkas secara bersamaan.
 
 ## Kredensial Default (Inisialisasi)
 - **Username**: `admin`
